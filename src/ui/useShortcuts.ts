@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { addBus, clipboardItems, deleteClips, duplicateClips, pasteClips } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
+import { saveCurrent } from '../storage/session'
 import { playheadPosition, togglePlay } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 
@@ -15,14 +16,21 @@ function isTyping(target: EventTarget | null): boolean {
  * Global shortcuts:
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
  * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
- * Ctrl+Shift+B add bus
+ * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects
  */
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target) || document.querySelector('[aria-modal="true"]')) return
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
+      // Save works everywhere, even while typing, instead of the browser's "save page".
+      if (mod && key === 's') {
+        e.preventDefault()
+        if (e.target instanceof HTMLElement) e.target.blur()
+        void saveCurrent()
+        return
+      }
+      if (isTyping(e.target) || document.querySelector('[aria-modal="true"]')) return
       const { undo, redo, project } = useProjectStore.getState()
       const view = useViewStore.getState()
       const handled = () => e.preventDefault()
@@ -30,6 +38,9 @@ export function useShortcuts() {
       if (e.code === 'Space' && !mod) {
         handled()
         togglePlay()
+      } else if (mod && key === 'o') {
+        handled()
+        view.setProjectsOpen(true)
       } else if (mod && e.shiftKey && key === 'b') {
         handled()
         addBus()

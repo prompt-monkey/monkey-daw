@@ -6,7 +6,9 @@ import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import { saveCurrent, useIsDirty, useSessionStore } from '../storage/session'
 import { ExportDialog } from './ExportDialog'
+import { ProjectsDialog } from './ProjectsDialog'
 import { NumberField } from './NumberField'
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
@@ -30,6 +32,37 @@ function TimeReadout() {
   )
 }
 
+function ProjectControls() {
+  const name = useProjectStore((s) => s.project.name)
+  const dirty = useIsDirty()
+  const saving = useSessionStore((s) => s.saving)
+  const savedId = useSessionStore((s) => s.savedId)
+  const status = dirty ? 'Unsaved changes' : savedId ? 'Saved' : 'No changes'
+  const projectsOpen = useViewStore((s) => s.projectsOpen)
+  const setProjectsOpen = useViewStore((s) => s.setProjectsOpen)
+  const button = 'rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm hover:bg-surface disabled:opacity-40'
+  return (
+    <div className="flex items-center gap-2">
+      <button className={button} onClick={() => setProjectsOpen(true)} title="Open, save and manage projects (Ctrl+O)">
+        Projects
+      </button>
+      <span className="max-w-48 truncate text-sm font-semibold" title={name}>
+        {name}
+      </span>
+      <span
+        className={`size-2 shrink-0 rounded-full ${dirty ? 'bg-warn' : 'bg-transparent'}`}
+        title={status}
+        aria-label={status}
+        role="status"
+      />
+      <button className={button} onClick={() => void saveCurrent()} disabled={saving} title="Save (Ctrl+S)">
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      {projectsOpen && <ProjectsDialog onClose={() => setProjectsOpen(false)} />}
+    </div>
+  )
+}
+
 export function TransportBar() {
   const playing = useTransportStore((s) => s.playing)
   const bpm = useProjectStore((s) => s.project.bpm)
@@ -49,6 +82,7 @@ export function TransportBar() {
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3">
+      <ProjectControls />
       <TimeReadout />
       <button
         className={`rounded-md px-4 py-1.5 text-sm font-semibold ${playing ? 'bg-warn text-accent-ink' : 'bg-accent text-accent-ink'}`}

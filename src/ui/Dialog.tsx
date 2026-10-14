@@ -6,11 +6,12 @@ interface Props {
   onClose: () => void
   /** When false, Escape and backdrop clicks are ignored (e.g. while a task runs). */
   dismissible?: boolean
+  wide?: boolean
   children: React.ReactNode
 }
 
 /** Modal dialog rendered into document.body. Escape or a backdrop click closes it. */
-export function Dialog({ title, onClose, dismissible = true, children }: Props) {
+export function Dialog({ title, onClose, dismissible = true, wide = false, children }: Props) {
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function Dialog({ title, onClose, dismissible = true, children }: Props) 
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md rounded-xl border border-line bg-surface p-5 text-text shadow-2xl"
+        className={`w-full ${wide ? 'max-w-xl' : 'max-w-md'} rounded-xl border border-line bg-surface p-5 text-text shadow-2xl`}
       >
         <h2 className="mb-4 text-base font-semibold">{title}</h2>
         {children}

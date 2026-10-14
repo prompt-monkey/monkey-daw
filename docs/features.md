@@ -3,6 +3,42 @@
 Scope: a browser DAW with no accounts, no collaboration and no paywall. Everything is free and
 unlimited, and projects and samples stay on the user's device. One fixed dark theme.
 
+## Progress
+
+Phases 0–3 are built. Every step has unit tests (145 in total) and was checked in Chrome.
+
+| Phase | Step | Status | Commit |
+|---|---|---|---|
+| 0 | Foundation: data model, undo/redo, audio engine and scheduler | Done | `1ce5b5f` |
+| 1 | Timeline: ruler, clip editing, waveforms, selection, zoom | Done | `e121d45` |
+| 1 | Tracks and mixer: buses, sends, routing, meters, track management | Done | `5591d58` |
+| 1 | Export: WAV mix (whole project or loop) | Done | `0eab8e0` |
+| 2 | Projects and storage: save/open, recovery autosave, `.mdaw` project file | Done | `3fe3cba` |
+| 2 | Sample browser: libraries, tagging, filters, preview, drag to tracks | Done | `b2f1f9a` |
+| 2 | Recording and metronome | Done | `da81b00` |
+| 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `177f1a8`, `1588287` |
+| 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
+| 4 | Piano roll → Drums → Tempo sync | Next | |
+| 5 | MP3/stems export, Lyrics, App shell polish | Planned | |
+| 6 | Effects batches 2 and 3 | Deferred to the end | |
+
+Known gaps in what's built (planned for later steps):
+- Timeline: reverse, pitch and stretch on clips, curved clip fades, clip rename, consolidate and
+  convert-to-audio
+- Mixer and automation: automation on buses and the master, writing automation by moving a knob
+- Sample browser: no bundled starter pack; MIDI melodies need the piano roll
+- Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
+
+## Development
+
+- **Node.js 24** (24.21.0 is what the project is built and tested with). Vite 8 and Vitest 5 don't
+  start on Node 20.12. With nvm-windows: `nvm use 24.21.0`.
+- `npm install`, then:
+  - `npm run dev`: development server
+  - `npm test`: unit tests
+  - `npm run typecheck` and `npm run lint`
+  - `npm run build`: production build in `dist/`
+
 ## 1. Sample browser
 - Libraries made from the user's own imported folders, plus an optional bundled starter pack
 - Folder tree, waveform preview
@@ -164,17 +200,17 @@ A static app with no backend.
 |---|---|---|
 | Language and build | TypeScript + Vite | Fast development builds, easy setup for AudioWorklets and Web Workers |
 | UI | React | Large ecosystem; the parts that need speed (timeline, meters) live outside React anyway |
-| Styling and components | Tailwind CSS + shadcn/ui (Radix) | Accessible dialogs, sliders and menus; one dark theme via CSS variables |
+| Styling and components | Tailwind CSS with small custom components (dialog, menu, knob) | One dark theme via CSS variables; shadcn/ui (Radix) wasn't needed so far |
 | State and undo/redo | Zustand + Immer, with a command history for undo/redo | Simple, fast, and lets the audio engine subscribe outside React |
 | Audio engine | Web Audio API, our own engine (no Tone.js) | Full control of routing, buses and sends; one scheduler shared by live playback and offline export |
 | Custom DSP | AudioWorklet | Auto-pitch and effects the built-in audio nodes can't do |
 | Timeline and waveforms | Canvas 2D, peaks computed in a Web Worker | Smooth scrolling and zoom with many clips |
 | Local storage | IndexedDB via Dexie | Projects, recordings and imported samples; request persistent storage |
-| Project file and stems | fflate (or JSZip) | Builds the project ZIP and the stems ZIP |
+| Project file and stems | fflate | Builds the project ZIP (and later the stems ZIP) |
 | MP3 export | lamejs (maintained fork), in a Web Worker | |
 | Time stretch / pitch shift | SoundTouch (WASM/worklet) first; Rubber Band WASM later if quality matters | The hardest DSP part, best left to a library |
 | MIDI import | @tonejs/midi | Parsing only, not the Tone.js audio engine |
-| Testing | Vitest (model, scheduler, DSP) + Playwright (end-to-end in a real browser) | The audio engine needs real-browser tests |
+| Testing | Vitest (model, scheduler, DSP, storage with fake-indexeddb); browser checks in Chrome | The audio engine needs real-browser checks; automated Playwright tests are still to add |
 | Hosting | Any static host (GitHub Pages, Netlify, Cloudflare Pages); optional PWA for offline use | No server needed |
 
 Decisions:

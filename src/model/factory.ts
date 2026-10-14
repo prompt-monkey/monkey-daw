@@ -1,0 +1,37 @@
+import type { Clip, Id, Project, Track, TrackKind } from './types'
+
+export function createId(prefix: string): Id {
+  return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
+}
+
+export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
+  return { id: createId('trk'), name, kind, volume: 1, pan: 0, muted: false, solo: false, clips: [] }
+}
+
+export function createClip(fields: Pick<Clip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<Clip>): Clip {
+  return { id: createId('clp'), offset: 0, gain: 1, fadeIn: 0, fadeOut: 0, ...fields }
+}
+
+export function createProject(name = 'Untitled project'): Project {
+  return {
+    version: 1,
+    id: createId('prj'),
+    name,
+    bpm: 120,
+    timeSignature: { beats: 4, unit: 4 },
+    snap: 'beat',
+    loop: { enabled: false, start: 0, end: 8 },
+    master: { volume: 1, muted: false },
+    tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),
+    assets: {},
+  }
+}
+
+/** End of the last clip on the timeline, in seconds. */
+export function projectLength(project: Project): number {
+  let end = 0
+  for (const track of project.tracks) {
+    for (const clip of track.clips) end = Math.max(end, clip.start + clip.duration)
+  }
+  return end
+}

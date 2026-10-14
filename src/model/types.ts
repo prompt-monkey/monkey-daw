@@ -1,0 +1,80 @@
+// Project data model. Everything here is plain, serializable data: the audio engine and the
+// UI derive their state from it, and the project file (later) is just this object as JSON.
+//
+// Time convention: all positions and lengths on the timeline are in seconds.
+
+export type Id = string
+
+export interface TimeSignature {
+  /** Beats per bar (the top number: 6 in 6/8). */
+  beats: number
+  /** Note value of one beat (the bottom number: 8 in 6/8). */
+  unit: number
+}
+
+export type SnapMode = 'off' | 'bar' | 'beat'
+
+export interface LoopRegion {
+  enabled: boolean
+  start: number
+  end: number
+}
+
+export type TrackKind = 'audio' | 'midi' | 'drums'
+
+export interface Clip {
+  id: Id
+  name: string
+  assetId: Id
+  /** Timeline position where the clip begins. */
+  start: number
+  /** Where playback begins inside the asset (trimmed-off head). */
+  offset: number
+  /** Length of the clip on the timeline. */
+  duration: number
+  /** Linear gain applied to this clip (1 = 0 dB). */
+  gain: number
+  fadeIn: number
+  fadeOut: number
+}
+
+export interface Track {
+  id: Id
+  name: string
+  kind: TrackKind
+  /** Linear fader gain (1 = 0 dB). */
+  volume: number
+  /** Stereo position, -1 (left) to 1 (right). */
+  pan: number
+  muted: boolean
+  solo: boolean
+  clips: Clip[]
+}
+
+/** Metadata of an audio file used by the project. The decoded audio lives in the engine. */
+export interface AssetMeta {
+  id: Id
+  name: string
+  duration: number
+  sampleRate: number
+  channels: number
+}
+
+export interface MasterChannel {
+  volume: number
+  muted: boolean
+}
+
+export interface Project {
+  version: 1
+  id: Id
+  name: string
+  /** Tempo in quarter notes per minute. */
+  bpm: number
+  timeSignature: TimeSignature
+  snap: SnapMode
+  loop: LoopRegion
+  master: MasterChannel
+  tracks: Track[]
+  assets: Record<Id, AssetMeta>
+}

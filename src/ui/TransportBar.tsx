@@ -81,6 +81,8 @@ export function TransportBar() {
   const setMixerOpen = useViewStore((s) => s.setMixerOpen)
   const libraryOpen = useViewStore((s) => s.libraryOpen)
   const setLibraryOpen = useViewStore((s) => s.setLibraryOpen)
+  const lyricsOpen = useViewStore((s) => s.lyricsOpen)
+  const setLyricsOpen = useViewStore((s) => s.setLyricsOpen)
 
   const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
 
@@ -180,6 +182,14 @@ export function TransportBar() {
           title="Show or hide the sample library"
         >
           Library
+        </button>
+        <button
+          className={`${button} ${lyricsOpen ? 'text-accent' : ''}`}
+          onClick={() => setLyricsOpen(!lyricsOpen)}
+          aria-pressed={lyricsOpen}
+          title="Show or hide the lyrics"
+        >
+          Lyrics
         </button>
         <button className={button} onClick={() => setExportOpen(true)} title="Export the mix or stems as WAV or MP3">
           Export

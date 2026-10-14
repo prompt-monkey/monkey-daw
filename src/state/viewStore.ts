@@ -34,6 +34,7 @@ interface ViewStore {
   mixerOpen: boolean
   projectsOpen: boolean
   libraryOpen: boolean
+  lyricsOpen: boolean
   /** What the bottom panel shows. */
   bottomPanel: BottomPanelView
   /** The MIDI clip open in the piano roll. */
@@ -56,6 +57,7 @@ interface ViewStore {
   setMixerOpen: (open: boolean) => void
   setProjectsOpen: (open: boolean) => void
   setLibraryOpen: (open: boolean) => void
+  setLyricsOpen: (open: boolean) => void
   setBottomPanel: (panel: BottomPanelView) => void
   /** Opens a MIDI clip in the piano roll. */
   openPianoRoll: (trackId: Id, clipId: Id) => void
@@ -80,6 +82,7 @@ export const useViewStore = create<ViewStore>()((set) => ({
   mixerOpen: true,
   projectsOpen: false,
   libraryOpen: true,
+  lyricsOpen: false,
   bottomPanel: 'mixer',
   pianoRoll: null,
   patternMode: true,
@@ -98,6 +101,7 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setMixerOpen: (mixerOpen) => set({ mixerOpen }),
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
   setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
+  setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel }),
   openPianoRoll: (trackId, clipId) => set({ pianoRoll: { trackId, clipId }, bottomPanel: 'pianoRoll', mixerOpen: true }),
   setPatternMode: (patternMode) => set({ patternMode }),

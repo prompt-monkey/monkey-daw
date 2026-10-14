@@ -1,4 +1,5 @@
 import { LibraryPanel } from './library/LibraryPanel'
+import { LyricsPanel } from './lyrics/LyricsPanel'
 import { BottomPanel } from './mixer/BottomPanel'
 import { useViewStore } from './state/viewStore'
 import { Timeline } from './timeline/Timeline'
@@ -10,6 +11,7 @@ export default function App() {
   useShortcuts()
   const mixerOpen = useViewStore((s) => s.mixerOpen)
   const libraryOpen = useViewStore((s) => s.libraryOpen)
+  const lyricsOpen = useViewStore((s) => s.lyricsOpen)
   return (
     <div className="flex h-full flex-col">
       <TransportBar />
@@ -19,6 +21,7 @@ export default function App() {
           <Timeline />
           {mixerOpen && <BottomPanel />}
         </div>
+        {lyricsOpen && <LyricsPanel />}
       </div>
       <Toaster />
       <footer className="border-t border-line px-4 py-1.5 text-[11px] text-text-dim">

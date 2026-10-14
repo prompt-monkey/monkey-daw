@@ -7,7 +7,8 @@ import { createProject } from './factory'
 import { resolveTarget } from '../automation/targets'
 import { MAX_PITCH, MIN_NOTE_LENGTH, sortNotes } from './midi'
 import { MAX_SOURCE_BPM, MIN_SOURCE_BPM } from './tempo'
-import { clipFitsTrack, isMidiClip, type AudioClip, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
+import { LYRIC_KINDS } from '../lyrics/lyrics'
+import { clipFitsTrack, isMidiClip, type AudioClip, type LyricSection, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
 
 export class InvalidProjectError extends Error {}
 
@@ -189,6 +190,9 @@ export function normalizeProject(input: unknown): Project {
     tracks: raw.tracks.map((t) => normalizeTrack(t as Loose<Track>, busIds)).filter((t) => t !== null),
     buses,
     assets: raw.assets && typeof raw.assets === 'object' ? (raw.assets as Project['assets']) : {},
+    lyrics: (Array.isArray(raw.lyrics) ? (raw.lyrics as Loose<LyricSection>[]) : [])
+      .filter((s) => typeof s?.id === 'string')
+      .map((s) => ({ id: s.id!, kind: LYRIC_KINDS.find((k) => k === s.kind) ?? 'verse', text: typeof s.text === 'string' ? s.text : '' })),
   }
 }
 

@@ -26,6 +26,7 @@ import {
   type EffectType,
   type Id,
   type Instrument,
+  type LyricSectionKind,
   type MidiClip,
   type Note,
   type OutputTarget,
@@ -570,6 +571,49 @@ export function applyPattern(drumClipId: Id, drums: Note[] | null, parts: Genera
       track.clips = track.clips.filter((c) => c.start >= end - 1e-6 || c.start + c.duration <= clip.start + 1e-6)
       track.clips.push(createMidiClip({ name: part.track, start: clip.start, duration: clip.duration, notes: sortNotes(part.notes) }))
     }
+  })
+}
+
+// --- Lyrics --------------------------------------------------------------------------------
+
+/** Adds a section (at the end by default) and returns its id. */
+export function addLyricSection(kind: LyricSectionKind, index?: number): Id {
+  const id = createId('lyr')
+  update('Add lyrics section', (p) => void p.lyrics.splice(index ?? p.lyrics.length, 0, { id, kind, text: '' }))
+  return id
+}
+
+/** Typing in a section is one undo step until the field loses focus (call endGesture). */
+export function setLyricText(sectionId: Id, text: string) {
+  update(
+    'Edit lyrics',
+    (p) => {
+      const s = p.lyrics.find((x) => x.id === sectionId)
+      if (s) s.text = text
+    },
+    `lyrics:${sectionId}`,
+  )
+}
+
+export function setLyricKind(sectionId: Id, kind: LyricSectionKind) {
+  update('Change section', (p) => {
+    const s = p.lyrics.find((x) => x.id === sectionId)
+    if (s) s.kind = kind
+  })
+}
+
+export function moveLyricSection(sectionId: Id, toIndex: number) {
+  update('Move section', (p) => {
+    const from = p.lyrics.findIndex((x) => x.id === sectionId)
+    if (from < 0) return
+    const [s] = p.lyrics.splice(from, 1)
+    p.lyrics.splice(clamp(toIndex, 0, p.lyrics.length), 0, s)
+  })
+}
+
+export function removeLyricSection(sectionId: Id) {
+  update('Delete section', (p) => {
+    p.lyrics = p.lyrics.filter((x) => x.id !== sectionId)
   })
 }
 

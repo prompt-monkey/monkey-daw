@@ -55,6 +55,7 @@ export function createProject(name = 'Untitled project'): Project {
     tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),
     buses: [],
     assets: {},
+    lyrics: [],
   }
 }
 

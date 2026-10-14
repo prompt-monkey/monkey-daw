@@ -5,8 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–4 and the first step of phase 5 are built. Every step has unit tests (209 in total) and
-was checked in Chrome.
+Phases 0–4 and the export and lyrics steps of phase 5 are built. Every step has unit tests (214 in
+total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -22,8 +22,9 @@ was checked in Chrome.
 | 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `02bc687` |
 | 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `7d0ac05` |
 | 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `96f4544` |
-| 5 | Export: MP3, stems as a ZIP | Done | |
-| 5 | Lyrics → App shell polish | Next | |
+| 5 | Export: MP3, stems as a ZIP | Done | `dad7618` |
+| 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | |
+| 5 | App shell polish | Next | |
 | 6 | Effects batches 2 and 3 | Deferred to the end | |
 
 Known gaps in what's built (planned for later steps):
@@ -229,6 +230,13 @@ the whole mix (like a master compressor).
 - Write and Sing modes
 - Font size, copy
 - Download as .txt
+
+Built in phase 5. The Lyrics button opens a panel on the right. The lyrics are part of the
+project (saved, undoable, in the project file) as sections: Intro, Verse, Pre-chorus, Chorus,
+Bridge, Solo and Outro, which can be added, retyped, moved and deleted. Verses are numbered, other
+kinds only when repeated. Write mode edits each section; Sing mode shows the lyrics large to sing
+along. A−/A+ change the text size; the mode and size are remembered in the browser. Copy puts the
+lyrics on the clipboard and .txt downloads them, as "[Verse 1]" headed sections.
 
 ## 15. App shell
 - One fixed dark theme

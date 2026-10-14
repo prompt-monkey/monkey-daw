@@ -229,6 +229,15 @@ export interface MasterChannel {
   fxBypass: boolean
 }
 
+export type LyricSectionKind = 'intro' | 'verse' | 'pre-chorus' | 'chorus' | 'bridge' | 'solo' | 'outro'
+
+/** A part of the song's lyrics, in song order. */
+export interface LyricSection {
+  id: Id
+  kind: LyricSectionKind
+  text: string
+}
+
 export interface Project {
   version: 1
   id: Id
@@ -243,4 +252,5 @@ export interface Project {
   tracks: Track[]
   buses: Bus[]
   assets: Record<Id, AssetMeta>
+  lyrics: LyricSection[]
 }

@@ -8,6 +8,8 @@ import { addAudioClip, addTrack, addTrackWithClip, applyClipEdits } from '../sta
 import { useProjectStore } from '../state/projectStore'
 import { playheadPosition, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
+import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
+import { toast } from '../ui/toast'
 import { ClipView, type ClipHandle } from './ClipView'
 import { trackColor } from './colors'
 import { applyPreview } from './edits'
@@ -238,17 +240,28 @@ export function Timeline() {
     el.scrollLeft = 0
   }
 
+  const acceptsDrop = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(SAMPLE_DRAG_TYPE)
+
+  // Files or library samples dropped on a track land there, at the snapped drop time; dropped
+  // below the last track they go on a new track.
   const onDrop = (e: React.DragEvent) => {
-    const files = Array.from(e.dataTransfer.files)
-    if (!files.length || !lanesRef.current) return
+    if (!acceptsDrop(e) || !lanesRef.current) return
     e.preventDefault()
     const rect = lanesRef.current.getBoundingClientRect()
     const { project } = useProjectStore.getState()
     const time = (e.clientX - rect.left - HEADER_WIDTH) / pps
     const start = e.altKey ? Math.max(0, time) : snapTime(time, project.snap, project.bpm, project.timeSignature)
     const target = project.tracks[Math.floor((e.clientY - rect.top) / rowHeight)]
+    const sampleId = e.dataTransfer.getData(SAMPLE_DRAG_TYPE)
+    if (sampleId) {
+      placeSample(sampleId, start, target?.id ?? null).catch((err) =>
+        toast(`Could not add the sample: ${err instanceof Error ? err.message : 'unknown error'}`, 'error'),
+      )
+      return
+    }
     let at = start
-    void importFiles(files, (asset) => {
+    void importFiles(Array.from(e.dataTransfer.files), (asset) => {
       if (target) addAudioClip(target.id, asset, at)
       else addTrackWithClip(asset, at)
       at += asset.duration
@@ -256,19 +269,23 @@ export function Timeline() {
   }
 
   return (
-    <div ref={attachScroller} className="relative min-h-0 flex-1 overflow-auto bg-bg" data-timeline>
-      <div className="relative min-h-full" style={{ width: contentWidth }}>
+    <div ref={attachScroller} className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-bg" data-timeline>
+      <div
+        className="relative min-h-full"
+        style={{ width: contentWidth }}
+        onDragOver={(e) => {
+          if (!acceptsDrop(e)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDrop={onDrop}
+      >
         <div className="sticky top-0 z-40 flex">
           <TimelineToolbar onFit={fit} />
           <Ruler pps={pps} width={laneWidth} scroller={scroller} />
         </div>
 
-        <div
-          ref={lanesRef}
-          className="relative"
-          onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
-          onDrop={onDrop}
-        >
+        <div ref={lanesRef} className="relative">
           {tracks.map((track, i) => (
             <div key={track.id} className="flex">
               <TrackHeader

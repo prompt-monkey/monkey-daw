@@ -77,6 +77,8 @@ export function TransportBar() {
   const [exportOpen, setExportOpen] = useState(false)
   const mixerOpen = useViewStore((s) => s.mixerOpen)
   const setMixerOpen = useViewStore((s) => s.setMixerOpen)
+  const libraryOpen = useViewStore((s) => s.libraryOpen)
+  const setLibraryOpen = useViewStore((s) => s.setLibraryOpen)
 
   const button = 'rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm hover:bg-surface disabled:opacity-40'
 
@@ -158,6 +160,14 @@ export function TransportBar() {
       </div>
 
       <div className="ml-auto flex gap-2">
+        <button
+          className={`${button} ${libraryOpen ? 'text-accent' : ''}`}
+          onClick={() => setLibraryOpen(!libraryOpen)}
+          aria-pressed={libraryOpen}
+          title="Show or hide the sample library"
+        >
+          Library
+        </button>
         <button className={button} onClick={() => setExportOpen(true)} title="Export the mix as a WAV file">
           Export
         </button>

@@ -33,6 +33,7 @@ interface ViewStore {
   trackDrop: number | null
   mixerOpen: boolean
   projectsOpen: boolean
+  libraryOpen: boolean
   setPps: (pps: number) => void
   setTrackHeight: (h: TrackHeight) => void
   setFollowPlayhead: (on: boolean) => void
@@ -44,6 +45,7 @@ interface ViewStore {
   setTrackDrop: (index: number | null) => void
   setMixerOpen: (open: boolean) => void
   setProjectsOpen: (open: boolean) => void
+  setLibraryOpen: (open: boolean) => void
 }
 
 export const useViewStore = create<ViewStore>()((set) => ({
@@ -57,6 +59,7 @@ export const useViewStore = create<ViewStore>()((set) => ({
   trackDrop: null,
   mixerOpen: true,
   projectsOpen: false,
+  libraryOpen: true,
   setPps: (pps) => set({ pps: clampPps(pps) }),
   setTrackHeight: (trackHeight) => set({ trackHeight }),
   setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -69,4 +72,5 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setTrackDrop: (trackDrop) => set({ trackDrop }),
   setMixerOpen: (mixerOpen) => set({ mixerOpen }),
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
+  setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
 }))

@@ -11,7 +11,7 @@ import { useProjectStore } from '../state/projectStore'
 import { stop } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { toast } from '../ui/toast'
-import { openDatabase, type DawDatabase } from './db'
+import { getDatabase } from './db'
 import { PROJECT_FILE_EXTENSION, buildProjectFile, readProjectFile } from './projectFile'
 import {
   collectGarbage,
@@ -51,8 +51,7 @@ export function useIsDirty(): boolean {
 
 const isDirty = () => useProjectStore.getState().project !== useSessionStore.getState().baseline
 
-let database: DawDatabase | null = null
-const db = () => (database ??= openDatabase())
+const db = getDatabase
 const audioSource = (id: Id) => engine.assets.source(id)
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback)

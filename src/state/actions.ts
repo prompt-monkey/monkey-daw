@@ -164,6 +164,11 @@ export function setSend(trackId: Id, busId: Id, level: number) {
   )
 }
 
+export function renameProject(name: string) {
+  const trimmed = name.trim()
+  if (trimmed) update('Rename project', (p) => void (p.name = trimmed))
+}
+
 export function setBpm(bpm: number) {
   update('Change tempo', (p) => void (p.bpm = clamp(Math.round(bpm * 100) / 100, 20, 300)), 'bpm')
 }

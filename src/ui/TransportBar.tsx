@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { barBeatAt, formatTime } from '../model/grid'
 import type { SnapMode } from '../model/types'
 import { setBpm, setLoop, setSnap, setTimeSignature } from '../state/actions'
@@ -6,6 +6,7 @@ import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import { ExportDialog } from './ExportDialog'
 import { NumberField } from './NumberField'
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
@@ -40,6 +41,7 @@ export function TransportBar() {
   const undoLabel = useProjectStore((s) => s.history.past.at(-1)?.label)
   const redoLabel = useProjectStore((s) => s.history.future[0]?.label)
   const { undo, redo, endGesture } = useProjectStore.getState()
+  const [exportOpen, setExportOpen] = useState(false)
   const mixerOpen = useViewStore((s) => s.mixerOpen)
   const setMixerOpen = useViewStore((s) => s.setMixerOpen)
 
@@ -122,6 +124,10 @@ export function TransportBar() {
       </div>
 
       <div className="ml-auto flex gap-2">
+        <button className={button} onClick={() => setExportOpen(true)} title="Export the mix as a WAV file">
+          Export
+        </button>
+        {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
         <button
           className={`${button} ${mixerOpen ? 'text-accent' : ''}`}
           onClick={() => setMixerOpen(!mixerOpen)}

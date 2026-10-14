@@ -11,13 +11,25 @@ export interface RenderRange {
   end: number
 }
 
+export interface RenderOptions {
+  sampleRate?: number
+  /** Called with 0…1 as rendering advances. */
+  onProgress?: (fraction: number) => void
+}
+
+/** Number of progress updates over a render. */
+const PROGRESS_STEPS = 40
+/** Web Audio renders in blocks of this many frames; suspend times must fall on block edges. */
+const RENDER_QUANTUM = 128
+
 export async function renderProject(
   project: Project,
   assets: AssetRegistry,
   range: RenderRange,
-  sampleRate = 44100,
+  { sampleRate = 44100, onProgress }: RenderOptions = {},
 ): Promise<AudioBuffer> {
-  const length = Math.max(1, Math.ceil((range.end - range.start) * sampleRate))
+  const duration = range.end - range.start
+  const length = Math.max(1, Math.ceil(duration * sampleRate))
   const ctx = new OfflineAudioContext(2, length, sampleRate)
   const mix = new MixGraph(ctx)
   mix.sync(project, true)
@@ -25,5 +37,28 @@ export async function renderProject(
     const buffer = assets.get(ev.clip.assetId)
     if (buffer) mix.playClip(ev, buffer, ev.at - range.start)
   }
-  return ctx.startRendering()
+
+  if (onProgress) {
+    const blocks = Math.floor(length / RENDER_QUANTUM)
+    let previous = 0
+    for (let i = 1; i < PROGRESS_STEPS; i++) {
+      const block = Math.floor((blocks * i) / PROGRESS_STEPS)
+      if (block <= previous) continue
+      previous = block
+      const at = (block * RENDER_QUANTUM) / sampleRate
+      try {
+        void ctx.suspend(at).then(() => {
+          onProgress(at / duration)
+          void ctx.resume()
+        })
+      } catch {
+        // Some browsers can't suspend offline rendering; progress then jumps to the end.
+        break
+      }
+    }
+  }
+
+  const rendered = await ctx.startRendering()
+  onProgress?.(1)
+  return rendered
 }

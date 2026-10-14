@@ -20,7 +20,7 @@ function isTyping(target: EventTarget | null): boolean {
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return
+      if (isTyping(e.target) || document.querySelector('[aria-modal="true"]')) return
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
       const { undo, redo, project } = useProjectStore.getState()

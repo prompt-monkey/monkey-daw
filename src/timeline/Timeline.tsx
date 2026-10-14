@@ -145,9 +145,9 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
     (clip: Clip) => isMidiClip(clip) && useViewStore.getState().openPianoRoll(track.id, clip.id),
     [track.id],
   )
-  // Double-clicking empty space on a MIDI track adds a one-bar clip there and opens it.
+  // Double-clicking empty space on a MIDI or drum track adds a one-bar clip there and opens it.
   const onDoubleClick = (e: React.MouseEvent) => {
-    if (track.kind !== 'midi' || e.target !== e.currentTarget) return
+    if (track.kind === 'audio' || e.target !== e.currentTarget) return
     const { project } = useProjectStore.getState()
     const bar = secondsPerBar(project.bpm, project.timeSignature)
     const time = (e.clientX - e.currentTarget.getBoundingClientRect().left) / pps
@@ -167,7 +167,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
         if (ctx && e.target === e.currentTarget) startLaneGesture(e, ctx)
       }}
       onDoubleClick={onDoubleClick}
-      title={track.kind === 'midi' && !track.clips.length ? 'Double-click to add a MIDI clip' : undefined}
+      title={track.kind !== 'audio' && !track.clips.length ? `Double-click to add a ${track.kind === 'drums' ? 'drum' : 'MIDI'} clip` : undefined}
     >
       {track.clips.map((clip) => (
         <ClipView
@@ -180,6 +180,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
           onPointerDown={onClipDown}
           onResetGain={onResetGain}
           onOpen={onOpen}
+          noteRows={track.kit?.pads.map((p) => p.note)}
         />
       ))}
       <LiveTake trackId={track.id} pps={pps} height={height} />
@@ -371,17 +372,23 @@ export function Timeline() {
           )}
         </div>
 
-        <div className="sticky left-0 flex gap-2 p-3" style={{ width: HEADER_WIDTH }}>
-          <button onClick={() => addTrack()} className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2">
-            + Audio track
-          </button>
-          <button
-            onClick={() => addTrack(undefined, 'midi')}
-            className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2"
-            title="A track that plays notes with an instrument"
-          >
-            + MIDI track
-          </button>
+        <div className="sticky left-0 flex gap-1.5 p-3" style={{ width: HEADER_WIDTH }}>
+          {(
+            [
+              ['audio', '+ Audio', 'Add an audio track: clips, samples and recordings'],
+              ['midi', '+ MIDI', 'Add a MIDI track: notes played by an instrument'],
+              ['drums', '+ Drums', 'Add a drum track: drum pads with a step sequencer'],
+            ] as const
+          ).map(([kind, label, title]) => (
+            <button
+              key={kind}
+              onClick={() => addTrack(undefined, kind)}
+              className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm whitespace-nowrap hover:bg-surface-2"
+              title={title}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div

@@ -14,6 +14,7 @@ import { EffectChain } from '../effects/chain'
 import { sampleRange, valueAt } from '../automation/curve'
 import { parseTarget, resolveTarget } from '../automation/targets'
 import type { AutomationPoint, Id, Instrument, Project, Send, Track } from '../model/types'
+import { playDrumPad } from './drums'
 import { playInstrumentNote, type NoteToPlay } from './instruments'
 import { gainEnvelope, trackIsAudible, trimEventStart, type ClipEvent, type NoteEvent } from './schedule'
 
@@ -279,9 +280,34 @@ export class MixGraph {
     return voice
   }
 
+  /**
+   * Plays a note on a track at `when`: through its instrument, or as a hit of the drum pad on
+   * that note. `audio` looks up sampler and pad samples.
+   */
+  playTrackNote(
+    track: Track,
+    note: NoteToPlay,
+    when: number,
+    audio: (assetId: Id) => AudioBuffer | undefined,
+    onEnded?: () => void,
+  ): Voice | null {
+    if (track.instrument) {
+      const sample = track.instrument.sample && audio(track.instrument.sample.assetId)
+      return this.playNote(track.id, track.instrument, note, when, sample, onEnded)
+    }
+    const pad = track.kit?.pads.find((p) => p.note === note.pitch)
+    const strip = this.tracks.get(track.id)
+    // A drum hit is short: a late one is dropped rather than played off the beat.
+    if (!pad || !strip || this.ctx.currentTime - when > 0.03) return null
+    const at = Math.max(when, this.ctx.currentTime)
+    const voice = playDrumPad(this.ctx, strip.input, pad, note.velocity, at, pad.sample && audio(pad.sample.assetId))
+    voice.onEnded = onEnded
+    return voice
+  }
+
   /** Plays a note event from the scheduler; the event's timeline time is mapped to `when`. */
-  playNoteEvent(ev: NoteEvent, instrument: Instrument, when: number, sample?: AudioBuffer, onEnded?: () => void): Voice | null {
-    return this.playNote(ev.trackId, instrument, ev, when, sample, onEnded)
+  playNoteEvent(ev: NoteEvent, track: Track, when: number, audio: (assetId: Id) => AudioBuffer | undefined, onEnded?: () => void) {
+    return this.playTrackNote(track, ev, when, audio, onEnded)
   }
 
   dispose() {

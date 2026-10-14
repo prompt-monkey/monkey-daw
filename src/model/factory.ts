@@ -1,3 +1,4 @@
+import { createKit } from '../drums/kits'
 import type { AudioClip, Bus, Id, Instrument, MidiClip, Project, Track, TrackKind } from './types'
 
 export function createId(prefix: string): Id {
@@ -19,6 +20,7 @@ export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
     fxBypass: false,
     automation: [],
     ...(kind === 'midi' ? { instrument: createInstrument() } : {}),
+    ...(kind === 'drums' ? { kit: createKit() } : {}),
     clips: [],
   }
 }

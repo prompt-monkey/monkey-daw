@@ -3,7 +3,7 @@
 
 import { ensureEffectWorklets } from '../effects/nodes'
 import { createProject } from '../model/factory'
-import type { Id, Project, Track } from '../model/types'
+import type { Id, Project } from '../model/types'
 import { AssetRegistry } from './assets'
 import { getAudioContext } from './context'
 import { MixGraph, type MeterReading, type Voice } from './graph'
@@ -20,7 +20,11 @@ function timelineChanged(prev: Project, next: Project): boolean {
   if (prev.loop !== next.loop || prev.assets !== next.assets || prev.bpm !== next.bpm) return true
   if (prev.tracks.length !== next.tracks.length) return true
   return next.tracks.some(
-    (t, i) => t.id !== prev.tracks[i].id || t.clips !== prev.tracks[i].clips || t.instrument !== prev.tracks[i].instrument,
+    (t, i) =>
+      t.id !== prev.tracks[i].id ||
+      t.clips !== prev.tracks[i].clips ||
+      t.instrument !== prev.tracks[i].instrument ||
+      t.kit !== prev.tracks[i].kit,
   )
 }
 
@@ -143,10 +147,10 @@ export class AudioEngine {
     this.tick()
   }
 
-  /** Plays one note on a MIDI track right away (piano roll keyboard, drawing notes). */
-  async auditionNote(trackId: Id, pitch: number, duration = 0.3) {
+  /** Plays one note on a MIDI or drum track right away (piano roll keyboard, drum pads). */
+  async auditionNote(trackId: Id, pitch: number, duration = 0.3, velocity = 0.8) {
     const track = this.project.tracks.find((t) => t.id === trackId)
-    if (!track?.instrument) return
+    if (!track || track.kind === 'audio') return
     const ctx = this.context
     if (ctx.state !== 'running') await ctx.resume()
     await ensureEffectWorklets(ctx)
@@ -154,13 +158,10 @@ export class AudioEngine {
       this.mix = new MixGraph(ctx)
       this.mix.sync(this.project, true, this.restingPosition)
     }
-    const note = { pitch, velocity: 0.8, duration, glideFrom: null }
-    this.mix.playNote(trackId, track.instrument, note, ctx.currentTime + 0.005, this.sampleFor(track))
+    this.mix.playTrackNote(track, { pitch, velocity, duration, glideFrom: null }, ctx.currentTime + 0.005, this.audio)
   }
 
-  private sampleFor(track: Track): AudioBuffer | undefined {
-    return track.instrument?.sample && this.assets.get(track.instrument.sample.assetId)
-  }
+  private audio = (assetId: Id) => this.assets.get(assetId)
 
   private tick() {
     const { planner, mix, ctx } = this
@@ -185,8 +186,8 @@ export class AudioEngine {
       }
       for (const ev of noteEvents(project, window)) {
         const track = project.tracks.find((t) => t.id === ev.trackId)
-        if (!track?.instrument) continue
-        const voice = mix.playNoteEvent(ev, track.instrument, ev.at + ctxOffset, this.sampleFor(track), () => this.voices.delete(voice!))
+        if (!track) continue
+        const voice = mix.playNoteEvent(ev, track, ev.at + ctxOffset, this.audio, () => this.voices.delete(voice!))
         if (voice) this.voices.add(voice)
       }
     }

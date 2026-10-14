@@ -41,9 +41,10 @@ export async function renderProject(
     const buffer = assets.get(ev.clip.assetId)
     if (buffer) mix.playClip(ev, buffer, ev.at - range.start)
   }
+  const audio = (id: string) => assets.get(id)
   for (const ev of noteEvents(project, window)) {
-    const instrument = project.tracks.find((t) => t.id === ev.trackId)?.instrument
-    if (instrument) mix.playNoteEvent(ev, instrument, ev.at - range.start, instrument.sample && assets.get(instrument.sample.assetId))
+    const track = project.tracks.find((t) => t.id === ev.trackId)
+    if (track) mix.playNoteEvent(ev, track, ev.at - range.start, audio)
   }
 
   if (onProgress) {

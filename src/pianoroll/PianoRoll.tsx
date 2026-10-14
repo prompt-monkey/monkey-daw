@@ -21,13 +21,16 @@ import {
   transposeNotes,
 } from '../model/midi'
 import { isMidiClip, type Instrument, type MidiClip, type Note, type Track } from '../model/types'
-import { renameClip, setClipNotes, setInstrument, setSamplerSample } from '../state/actions'
+import { setClipNotes, setInstrument, setSamplerSample } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { playheadPosition, seek } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { trackColor } from '../timeline/colors'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { toast } from '../ui/toast'
+import { DrumEditor } from '../drums/DrumEditor'
+import { ClipNameInput, PlaybackModeToggle } from './shared'
+import { btnClass, segClass } from './styles'
 import { GRID_STEPS, usePianoRollStore, type PianoRollTool } from './store'
 
 const KEY_H = 14
@@ -169,15 +172,13 @@ interface Marquee {
 
 function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: Note[] }) {
   const { tool, grid, selection, velocity, setTool, setGrid, setVelocity } = usePianoRollStore()
-  const patternMode = useViewStore((s) => s.patternMode)
-  const setPatternMode = useViewStore((s) => s.setPatternMode)
   const sampleName = useProjectStore((s) => (track.instrument?.sample ? s.project.assets[track.instrument.sample.assetId]?.name : undefined))
   const endGesture = useProjectStore((s) => s.endGesture)
   const midiInput = useRef<HTMLInputElement>(null)
   const sampleInput = useRef<HTMLInputElement>(null)
   const instrument = track.instrument!
-  const btn = 'rounded border border-line px-1.5 py-0.5 leading-4 hover:bg-surface-2'
-  const seg = (active: boolean) => `px-1.5 py-0.5 leading-4 ${active ? 'bg-accent text-accent-ink' : 'hover:bg-surface-2'}`
+  const btn = btnClass
+  const seg = segClass
 
   const selected = notes.filter((n) => selection.includes(n.id))
   const shiftOctave = (dir: 1 | -1) => {
@@ -228,14 +229,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2 py-1 text-[11px]">
-      <input
-        key={clip.name}
-        defaultValue={clip.name}
-        onBlur={(e) => e.target.value !== clip.name && renameClip(clip.id, e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-        aria-label="Clip name"
-        className="w-28 truncate rounded bg-transparent px-1 font-semibold hover:bg-surface-2 focus:bg-bg"
-      />
+      <ClipNameInput clip={clip} />
       <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Tool">
         {TOOLS.map((t) => (
           <button key={t.id} className={seg(tool === t.id)} aria-pressed={tool === t.id} title={t.title} onClick={() => setTool(t.id)}>
@@ -253,19 +247,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
           ))}
         </select>
       </label>
-      <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Playback mode">
-        <button
-          className={seg(patternMode)}
-          aria-pressed={patternMode}
-          onClick={() => setPatternMode(true)}
-          title="PAT: play only this clip, looping, while the piano roll is open"
-        >
-          PAT
-        </button>
-        <button className={seg(!patternMode)} aria-pressed={!patternMode} onClick={() => setPatternMode(false)} title="SONG: play the whole project">
-          SONG
-        </button>
-      </div>
+      <PlaybackModeToggle />
       <label className="flex items-center gap-1 text-text-dim" title="Velocity of new notes, and of the selected notes">
         Vel
         <input
@@ -758,7 +740,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   )
 }
 
-/** The piano roll for the MIDI clip opened from the timeline. */
+/** The note editor for the clip opened from the timeline: the piano roll, or the drum editor. */
 export function PianoRoll() {
   const clipId = useViewStore((s) => s.pianoRoll?.clipId)
   // Look the clip up on every track: it may have been moved to another MIDI track.
@@ -766,12 +748,13 @@ export function PianoRoll() {
   const index = tracks.findIndex((t) => t.clips.some((c) => c.id === clipId))
   const track = tracks[index]
   const clip = track?.clips.find((c) => c.id === clipId)
-  if (!track || !clip || !isMidiClip(clip) || !track.instrument) {
+  if (!track || !clip || !isMidiClip(clip) || (!track.instrument && !track.kit)) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-text-dim">
-        Double-click a MIDI clip to edit its notes. Add a MIDI track with “+ MIDI track” under the tracks.
+        Double-click a MIDI or drum clip to edit it. Add one with “+ MIDI track” or “+ Drum track” under the tracks.
       </div>
     )
   }
+  if (track.kit) return <DrumEditor track={track} clip={clip} color={trackColor(index)} />
   return <Editor track={track} clip={clip} color={trackColor(index)} />
 }

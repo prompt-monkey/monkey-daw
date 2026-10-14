@@ -62,10 +62,12 @@ interface MidiNotesProps {
   width: number
   height: number
   color: string
+  /** Drum clips: one row per pad note, top to bottom, instead of a pitch range. */
+  rows?: number[]
 }
 
-/** Miniature of a MIDI clip's notes, scaled to the clip's pitch range. */
-function MidiNotes({ notes, offset, duration, width, height, color }: MidiNotesProps) {
+/** Miniature of a note clip: pitches scaled to the clip's range, or one row per drum pad. */
+function MidiNotes({ notes, offset, duration, width, height, color, rows }: MidiNotesProps) {
   const ref = useRef<HTMLCanvasElement>(null)
   const spb = beatSeconds(useProjectStore((s) => s.project.bpm))
 
@@ -84,20 +86,22 @@ function MidiNotes({ notes, offset, duration, width, height, color }: MidiNotesP
     const lo = Math.min(...notes.map((n) => n.pitch))
     const hi = Math.max(...notes.map((n) => n.pitch))
     // At least an octave tall, so a few notes don't fill the clip.
-    const span = Math.max(12, hi - lo + 1)
+    const span = rows ? rows.length : Math.max(12, hi - lo + 1)
     const bottom = lo - Math.floor((span - (hi - lo + 1)) / 2)
     const row = h / (span + 1)
+    const rowOf = (pitch: number) => (rows ? rows.indexOf(pitch) : -1)
     const pxPerSec = w / duration
     g.fillStyle = color
     for (const n of notes) {
       const x0 = (n.start * spb - offset) * pxPerSec
       const x1 = ((n.start + n.length) * spb - offset) * pxPerSec
       if (x1 <= 0 || x0 >= w) continue
-      const y = h - (n.pitch - bottom + 1) * row
+      if (rows && rowOf(n.pitch) < 0) continue
+      const y = rows ? (rowOf(n.pitch) + 0.5) * row : h - (n.pitch - bottom + 1) * row
       g.globalAlpha = 0.45 + 0.55 * n.velocity
       g.fillRect(Math.max(0, x0), y, Math.max(1, Math.min(w, x1) - Math.max(0, x0) - 1), Math.max(1, row - 1))
     }
-  }, [notes, offset, duration, width, height, color, spb])
+  }, [notes, offset, duration, width, height, color, spb, rows])
 
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" />
 }
@@ -111,9 +115,21 @@ interface Props {
   onPointerDown: (e: React.PointerEvent, clip: Clip, handle: ClipHandle) => void
   onResetGain: (clip: Clip) => void
   onOpen?: (clip: Clip) => void
+  /** Drum tracks: the pad notes, in row order. */
+  noteRows?: number[]
 }
 
-export const ClipView = memo(function ClipView({ clip, color, pps, height, selected, onPointerDown, onResetGain, onOpen }: Props) {
+export const ClipView = memo(function ClipView({
+  clip,
+  color,
+  pps,
+  height,
+  selected,
+  onPointerDown,
+  onResetGain,
+  onOpen,
+  noteRows,
+}: Props) {
   const width = Math.max(2, clip.duration * pps)
   const bodyHeight = height - 4
   const showName = height >= 48
@@ -155,7 +171,15 @@ export const ClipView = memo(function ClipView({ clip, color, pps, height, selec
       )}
       <div className="absolute inset-x-0" style={{ top: waveTop, height: waveHeight }}>
         {isMidiClip(clip) ? (
-          <MidiNotes notes={clip.notes} offset={clip.offset} duration={clip.duration} width={width} height={waveHeight} color={color} />
+          <MidiNotes
+            notes={clip.notes}
+            offset={clip.offset}
+            duration={clip.duration}
+            width={width}
+            height={waveHeight}
+            color={color}
+            rows={noteRows}
+          />
         ) : (
           <Waveform
             assetId={clip.assetId}

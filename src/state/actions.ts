@@ -3,6 +3,7 @@
 
 import { current } from 'immer'
 import { createBus, createClip, createId, createMidiClip, createTrack } from '../model/factory'
+import { createKit } from '../drums/kits'
 import { secondsPerBar } from '../model/grid'
 import { beatSeconds, notesEnd, sortNotes } from '../model/midi'
 import { MAX_GAIN } from '../model/levels'
@@ -18,6 +19,7 @@ import {
   type AutomationTarget,
   type Bus,
   type Clip,
+  type DrumPad,
   type Effect,
   type EffectParams,
   type EffectType,
@@ -28,6 +30,7 @@ import {
   type OutputTarget,
   type Project,
   type SnapMode,
+  type SynthPreset,
   type TimeSignature,
   type Track,
   type TrackKind,
@@ -52,8 +55,10 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 /** Adds a track (at the end by default) and returns its id. */
 export function addTrack(index?: number, kind: TrackKind = 'audio'): Id {
   const n = useProjectStore.getState().project.tracks.length + 1
-  const track = createTrack(kind === 'midi' ? `MIDI ${n}` : `Track ${n}`, kind)
-  update(kind === 'midi' ? 'Add MIDI track' : 'Add track', (p) => {
+  const names = { audio: ['Track', 'Add track'], midi: ['MIDI', 'Add MIDI track'], drums: ['Drums', 'Add drum track'] }
+  const [name, label] = names[kind]
+  const track = createTrack(`${name} ${n}`, kind)
+  update(label, (p) => {
     p.tracks.splice(index ?? p.tracks.length, 0, track)
   })
   return track.id
@@ -345,11 +350,11 @@ function findMidiClip(p: Project, clipId: Id): { track: Track; clip: MidiClip } 
   return undefined
 }
 
-/** Adds an empty MIDI clip (one bar by default) to a MIDI track. Returns its id. */
+/** Adds an empty note clip (one bar by default) to a MIDI or drum track. Returns its id. */
 export function addMidiClip(trackId: Id, start: number, duration?: number): Id | null {
   const { project } = useProjectStore.getState()
   const track = findTrack(project, trackId)
-  if (track?.kind !== 'midi') return null
+  if (!track || track.kind === 'audio') return null
   const clip = createMidiClip({
     name: track.name,
     start: Math.max(0, start),
@@ -420,19 +425,106 @@ export function renameClip(clipId: Id, name: string) {
   })
 }
 
-/** Imported MIDI parts: each becomes a MIDI track with one clip starting at `start`. */
-export function addMidiTracks(parts: { name: string; notes: Note[] }[], start: number, label = 'Import MIDI'): Id[] {
+/** Imported MIDI parts: each becomes a MIDI (or drum) track with one clip starting at `start`. */
+export function addMidiTracks(
+  parts: { name: string; notes: Note[]; kind?: 'midi' | 'drums' }[],
+  start: number,
+  label = 'Import MIDI',
+): Id[] {
   const { project } = useProjectStore.getState()
   const spb = beatSeconds(project.bpm)
   const bar = secondsPerBar(project.bpm, project.timeSignature)
   const tracks = parts.map((part) => {
-    const track = createTrack(part.name, 'midi')
+    const track = createTrack(part.name, part.kind ?? 'midi')
     const length = Math.max(bar, Math.ceil((notesEnd(part.notes) * spb) / bar - 1e-6) * bar)
     track.clips.push(createMidiClip({ name: part.name, start: Math.max(0, start), duration: length, notes: sortNotes(part.notes) }))
     return track
   })
   if (tracks.length) update(label, (p) => void p.tracks.push(...tracks))
   return tracks.map((t) => t.id)
+}
+
+// --- Drums ---------------------------------------------------------------------------------
+
+function findPad(p: Project, trackId: Id, note: number): DrumPad | undefined {
+  return findTrack(p, trackId)?.kit?.pads.find((pad) => pad.note === note)
+}
+
+/** Changes a pad's tune, decay or gain; a slider drag is one undo step (end it with endGesture). */
+export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad, 'tune' | 'decay' | 'gain' | 'name'>>) {
+  const key = Object.keys(changes).join(',')
+  update(
+    'Change pad',
+    (p) => {
+      const pad = findPad(p, trackId, note)
+      if (!pad) return
+      if (changes.tune !== undefined) pad.tune = clamp(changes.tune, -12, 12)
+      if (changes.decay !== undefined) pad.decay = clamp(changes.decay, 0.25, 4)
+      if (changes.gain !== undefined) pad.gain = clamp(changes.gain, 0, 2)
+      if (changes.name?.trim()) pad.name = changes.name.trim()
+      const kit = findTrack(p, trackId)!.kit!
+      kit.preset = 'custom'
+    },
+    `pad:${trackId}:${note}:${key}`,
+  )
+}
+
+/** Puts a one-shot on a pad (or, with null, goes back to the pad's synthesized sound). */
+export function setPadSample(trackId: Id, note: number, asset: AssetMeta | null) {
+  update(asset ? 'Set pad sample' : 'Clear pad sample', (p) => {
+    const pad = findPad(p, trackId, note)
+    if (!pad) return
+    if (asset) {
+      p.assets[asset.id] = asset
+      pad.sample = { assetId: asset.id }
+    } else {
+      delete pad.sample
+    }
+    findTrack(p, trackId)!.kit!.preset = 'custom'
+  })
+}
+
+/** Replaces a drum track's kit with a preset (pad samples are dropped; undo brings them back). */
+export function applyKitPreset(trackId: Id, presetId: string) {
+  const kit = createKit(presetId)
+  update('Change kit', (p) => {
+    const t = findTrack(p, trackId)
+    if (t?.kit) t.kit = kit
+  })
+}
+
+export interface GeneratedPart {
+  /** Name of the MIDI track the part goes on; it is created if there's none. */
+  track: string
+  instrument: SynthPreset
+  /** Notes in beats from the drum clip's start. */
+  notes: Note[]
+}
+
+/**
+ * Writes a generated pattern as one undo step: `drums` replaces the drum clip's notes (in its
+ * content beats), and each part replaces what its MIDI track has under the drum clip.
+ */
+export function applyPattern(drumClipId: Id, drums: Note[] | null, parts: GeneratedPart[], label = 'Generate pattern') {
+  update(label, (p) => {
+    const found = findMidiClip(p, drumClipId)
+    if (!found) return
+    const { clip } = found
+    if (drums) clip.notes = sortNotes(drums)
+    const end = clip.start + clip.duration
+    // New tracks go right below the drum track, in the order given.
+    let insertAt = p.tracks.indexOf(found.track) + 1
+    for (const part of parts) {
+      let track = p.tracks.find((t) => t.kind === 'midi' && t.name === part.track)
+      if (!track) {
+        track = createTrack(part.track, 'midi')
+        track.instrument!.type = part.instrument
+        p.tracks.splice(insertAt++, 0, track)
+      }
+      track.clips = track.clips.filter((c) => c.start >= end - 1e-6 || c.start + c.duration <= clip.start + 1e-6)
+      track.clips.push(createMidiClip({ name: part.track, start: clip.start, duration: clip.duration, notes: sortNotes(part.notes) }))
+    }
+  })
 }
 
 // --- Effects -------------------------------------------------------------------------------

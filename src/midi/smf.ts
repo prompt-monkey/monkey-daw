@@ -5,6 +5,8 @@ import type { Note } from '../model/types'
 
 export interface MidiPart {
   name: string
+  /** 0-based MIDI channel; 9 (channel 10) is drums in General MIDI. */
+  channel: number
   notes: Omit<Note, 'id'>[]
 }
 
@@ -161,7 +163,7 @@ export function parseMidiFile(bytes: Uint8Array): MidiFile {
     for (const channel of channels) {
       const base = trackName || `Track ${t + 1}`
       const name = channels.length > 1 ? `${base} · ch ${channel + 1}` : base
-      parts.push({ name, notes: byChannel.get(channel)!.sort((x, y) => x.start - y.start || x.pitch - y.pitch) })
+      parts.push({ name, channel, notes: byChannel.get(channel)!.sort((x, y) => x.start - y.start || x.pitch - y.pitch) })
     }
   }
 

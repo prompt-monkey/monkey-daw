@@ -2,10 +2,11 @@
 // older data may lack. Anything that can't be repaired is rejected.
 
 import { normalizeEffect } from '../effects/definitions'
+import { DRUM_VOICES, PADS, createKit, presetName } from '../drums/kits'
 import { createProject } from './factory'
 import { resolveTarget } from '../automation/targets'
 import { MAX_PITCH, MIN_NOTE_LENGTH, sortNotes } from './midi'
-import { isMidiClip, type AudioClip, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
+import { clipFitsTrack, isMidiClip, type AudioClip, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
 
 export class InvalidProjectError extends Error {}
 
@@ -42,6 +43,32 @@ function normalizeInstrument(raw: unknown): Instrument {
   // A sampler without a sample has nothing to play.
   if (type === 'sampler' && !instrument.sample) instrument.type = 'keys'
   return instrument
+}
+
+const clampNum = (v: unknown, fallback: number, min: number, max: number) => Math.min(max, Math.max(min, num(v, fallback)))
+
+function normalizeKit(raw: unknown): DrumKit {
+  const r = (raw ?? {}) as Loose<DrumKit>
+  const seen = new Set<number>()
+  const pads: DrumPad[] = []
+  for (const p of (Array.isArray(r.pads) ? r.pads : []) as Loose<DrumPad>[]) {
+    if (typeof p?.note !== 'number' || !Number.isInteger(p.note) || p.note < 0 || p.note > MAX_PITCH || seen.has(p.note)) continue
+    seen.add(p.note)
+    const known = PADS.find((x) => x.note === p.note)
+    const pad: DrumPad = {
+      note: p.note,
+      name: str(p.name, known?.name ?? 'Pad'),
+      voice: DRUM_VOICES.find((v) => v === p.voice) ?? known?.voice ?? 'kick',
+      tune: clampNum(p.tune, 0, -12, 12),
+      decay: clampNum(p.decay, 1, 0.25, 4),
+      gain: clampNum(p.gain, 1, 0, 2),
+    }
+    const sample = p.sample as Loose<NonNullable<DrumPad['sample']>> | undefined
+    if (typeof sample?.assetId === 'string') pad.sample = { assetId: sample.assetId }
+    pads.push(pad)
+  }
+  if (!pads.length) return createKit()
+  return { preset: typeof r.preset === 'string' && presetName(r.preset) !== 'Custom' ? r.preset : 'custom', pads }
 }
 
 function normalizeClip(raw: Loose<Clip>): Clip | null {
@@ -88,9 +115,9 @@ function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
         .filter((s): s is { busId: string; level: number } => typeof s?.busId === 'string' && busIds.has(s.busId))
         .map((s) => ({ busId: s.busId, level: num(s.level, 0) }))
     : []
-  // Audio clips only go on audio tracks, MIDI clips only on MIDI tracks.
+  // Audio clips only go on audio tracks, note clips only on MIDI and drum tracks.
   const clips = (Array.isArray(raw.clips) ? raw.clips.map((c) => normalizeClip(c as Loose<Clip>)).filter((c) => c !== null) : []).filter(
-    (c) => isMidiClip(c) === (kind === 'midi'),
+    (c) => clipFitsTrack(c, { kind }),
   )
   const track: Track = {
     id: raw.id,
@@ -106,6 +133,7 @@ function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
     fxBypass: bool(raw.fxBypass),
     automation: [],
     ...(kind === 'midi' ? { instrument: normalizeInstrument(raw.instrument) } : {}),
+    ...(kind === 'drums' ? { kit: normalizeKit(raw.kit) } : {}),
     clips,
   }
   track.automation = lanes(raw.automation, track)
@@ -159,12 +187,13 @@ export function normalizeProject(input: unknown): Project {
   }
 }
 
-/** Ids of the assets the project actually uses: audio clips and sampler instruments. */
+/** Ids of the assets the project actually uses: audio clips, samplers and drum pads. */
 export function usedAssetIds(project: Project): string[] {
   const ids = new Set<string>()
   for (const t of project.tracks) {
     for (const c of t.clips) if (!isMidiClip(c)) ids.add(c.assetId)
     if (t.instrument?.sample) ids.add(t.instrument.sample.assetId)
+    for (const pad of t.kit?.pads ?? []) if (pad.sample) ids.add(pad.sample.assetId)
   }
   return [...ids]
 }

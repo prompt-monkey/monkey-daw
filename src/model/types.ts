@@ -65,8 +65,8 @@ export type Clip = AudioClip | MidiClip
 
 export const isMidiClip = (clip: Clip): clip is MidiClip => 'notes' in clip
 
-/** MIDI clips live on MIDI tracks, audio clips on audio tracks. */
-export const clipFitsTrack = (clip: Clip, track: Pick<Track, 'kind'>) => isMidiClip(clip) === (track.kind === 'midi')
+/** Note clips live on MIDI and drum tracks, audio clips on audio tracks. */
+export const clipFitsTrack = (clip: Clip, track: Pick<Track, 'kind'>) => isMidiClip(clip) === (track.kind !== 'audio')
 
 export type SynthPreset = 'keys' | 'pluck' | 'bass' | 'pad' | 'lead'
 
@@ -77,6 +77,50 @@ export interface Instrument {
   sample?: { assetId: Id; root: number }
   /** Portamento time in seconds; above 0 the instrument plays one note at a time and slides. */
   glide: number
+}
+
+/** Built-in synthesized drum sounds. */
+export type DrumVoice =
+  | 'kick'
+  | 'sub'
+  | 'snare'
+  | 'clap'
+  | 'rim'
+  | 'hat-closed'
+  | 'hat-open'
+  | 'crash'
+  | 'ride'
+  | 'tom-low'
+  | 'tom-mid'
+  | 'tom-high'
+  | 'cowbell'
+  | 'shaker'
+  | 'conga-low'
+  | 'conga-high'
+
+/**
+ * One pad of a drum kit. Drum clips are note clips: a hit is a note on the pad's MIDI note
+ * (General MIDI drum numbers), so drum MIDI files land on the right pads.
+ */
+export interface DrumPad {
+  note: number
+  name: string
+  /** The synthesized sound, used when the pad has no sample. */
+  voice: DrumVoice
+  /** Pitch in semitones, -12…12. */
+  tune: number
+  /** Decay time multiplier for the synthesized sound, 0.25…4. */
+  decay: number
+  /** Linear gain, 0…2. */
+  gain: number
+  /** A one-shot that replaces the synthesized sound. */
+  sample?: { assetId: Id }
+}
+
+export interface DrumKit {
+  /** The preset the kit started from (shown as its name). */
+  preset: string
+  pads: DrumPad[]
 }
 
 export interface Track {
@@ -101,6 +145,8 @@ export interface Track {
   automation: AutomationLane[]
   /** MIDI tracks only. */
   instrument?: Instrument
+  /** Drum tracks only. */
+  kit?: DrumKit
   clips: Clip[]
 }
 

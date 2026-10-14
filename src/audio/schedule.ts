@@ -58,7 +58,7 @@ export function clipEvents(project: Project, w: ScheduleWindow): ClipEvent[] {
   return events
 }
 
-/** One note to be played by a track's instrument. */
+/** One note to be played by a track's instrument, or one hit of a drum pad. */
 export interface NoteEvent {
   trackId: Id
   clipId: Id
@@ -83,8 +83,8 @@ export function noteEvents(project: Project, w: ScheduleWindow): NoteEvent[] {
   const cutAt = w.cutAt ?? Infinity
   const spb = beatSeconds(project.bpm)
   for (const track of project.tracks) {
-    if (track.kind !== 'midi' || !track.instrument) continue
-    const mono = track.instrument.glide > 0
+    if (track.kind === 'audio' || (!track.instrument && !track.kit)) continue
+    const mono = (track.instrument?.glide ?? 0) > 0
     for (const clip of track.clips) {
       if (!isMidiClip(clip)) continue
       const clipEnd = Math.min(clip.start + clip.duration, cutAt)

@@ -3,6 +3,7 @@ import { faderToGain, formatDb, gainToFader } from '../model/levels'
 import type { Track } from '../model/types'
 import { LevelMeter } from '../mixer/LevelMeter'
 import { INSTRUMENT_LABELS } from '../audio/instruments'
+import { presetName } from '../drums/kits'
 import { secondsPerBar } from '../model/grid'
 import { useTransportStore } from '../state/transport'
 import {
@@ -158,13 +159,13 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             aria-label="Track name"
             className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-semibold hover:bg-surface-2 focus:bg-bg"
           />
-          {track.instrument ? (
+          {track.kind !== 'audio' ? (
             <button
               onClick={editNotes}
               className={`${small} max-w-16 truncate text-accent`}
-              title="Edit the notes in the piano roll"
+              title={track.kit ? 'Edit the beat in the drum editor' : 'Edit the notes in the piano roll'}
             >
-              ♪ {INSTRUMENT_LABELS[track.instrument.type]}
+              {track.kit ? `▦ ${presetName(track.kit.preset)}` : `♪ ${track.instrument ? INSTRUMENT_LABELS[track.instrument.type] : ''}`}
             </button>
           ) : (
             <button
@@ -199,10 +200,11 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
               { label: 'Insert track above', onSelect: () => addTrack(index) },
               { label: 'Insert track below', onSelect: () => addTrack(index + 1) },
               { label: 'Insert MIDI track below', onSelect: () => addTrack(index + 1, 'midi') },
-              ...(track.kind === 'midi'
+              { label: 'Insert drum track below', onSelect: () => addTrack(index + 1, 'drums') },
+              ...(track.kind !== 'audio'
                 ? [
-                    { label: 'Edit notes…', onSelect: editNotes },
-                    { label: 'New MIDI clip at playhead', onSelect: newClipAtPlayhead },
+                    { label: track.kit ? 'Edit beat…' : 'Edit notes…', onSelect: editNotes },
+                    { label: `New ${track.kit ? 'drum' : 'MIDI'} clip at playhead`, onSelect: newClipAtPlayhead },
                   ]
                 : []),
               { label: 'Effects…', onSelect: () => useViewStore.getState().openRack(track.id) },

@@ -13,10 +13,8 @@ export function BottomPanel() {
     channel === 'master' ? 'Master' : ([...s.project.tracks, ...s.project.buses].find((c) => c.id === channel)?.name ?? 'Master'),
   )
   const pianoClipId = useViewStore((s) => s.pianoRoll?.clipId)
-  const clipName = useProjectStore((s) => {
-    for (const t of s.project.tracks) for (const c of t.clips) if (c.id === pianoClipId) return c.name
-    return null
-  })
+  const openTrack = useProjectStore((s) => s.project.tracks.find((t) => t.clips.some((c) => c.id === pianoClipId)))
+  const clipName = openTrack?.clips.find((c) => c.id === pianoClipId)?.name
   const tab = (id: BottomPanelView, label: string) => (
     <button
       role="tab"
@@ -35,7 +33,7 @@ export function BottomPanel() {
       <div role="tablist" className="flex shrink-0 border-b border-line bg-surface px-2">
         {tab('mixer', 'Mixer')}
         {tab('effects', `Effects · ${channelName}`)}
-        {pianoClipId && tab('pianoRoll', `Piano roll${clipName ? ` · ${clipName}` : ''}`)}
+        {pianoClipId && tab('pianoRoll', `${openTrack?.kind === 'drums' ? 'Drums' : 'Piano roll'}${clipName ? ` · ${clipName}` : ''}`)}
       </div>
       {panel === 'mixer' ? <Mixer /> : panel === 'effects' ? <EffectsRack /> : <PianoRoll />}
     </section>

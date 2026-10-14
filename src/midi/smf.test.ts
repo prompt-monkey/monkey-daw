@@ -33,6 +33,7 @@ describe('parseMidiFile', () => {
     expect(p.parts).toEqual([
       {
         name: 'Lead',
+        channel: 0,
         notes: [
           { pitch: 60, start: 0, length: 1, velocity: 100 / 127 },
           { pitch: 64, start: 1, length: 0.5, velocity: 1 },
@@ -50,6 +51,7 @@ describe('parseMidiFile', () => {
     ]
     const p = parseMidiFile(midiFile(96, [events]))
     expect(p.parts.map((x) => x.name)).toEqual(['Track 1 · ch 1', 'Track 1 · ch 10'])
+    expect(p.parts.map((x) => x.channel)).toEqual([0, 9])
     expect(p.parts[0].notes[0]).toMatchObject({ pitch: 60, length: 2 })
     expect(p.parts[1].notes[0]).toMatchObject({ pitch: 36, length: 1 })
   })

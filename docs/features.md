@@ -5,8 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–3 and the piano roll are built. Every step has unit tests (180 in total) and was checked
-in Chrome.
+Phases 0–3, the piano roll and drums are built. Every step has unit tests (195 in total) and was
+checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -19,8 +19,9 @@ in Chrome.
 | 2 | Recording and metronome | Done | `da81b00` |
 | 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `177f1a8`, `1588287` |
 | 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
-| 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | |
-| 4 | Drums → Tempo sync | Next | |
+| 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `02bc687` |
+| 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | |
+| 4 | Tempo sync | Next | |
 | 5 | MP3/stems export, Lyrics, App shell polish | Planned | |
 | 6 | Effects batches 2 and 3 | Deferred to the end | |
 
@@ -31,6 +32,9 @@ Known gaps in what's built (planned for later steps):
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
+- Drums: no choke groups (a closed hat doesn't cut an open hat); swing comes only from the
+  generator's genres; generated patterns are written for 16 steps per bar, so other time
+  signatures use the first steps of each pattern
 
 ## Development
 
@@ -116,6 +120,17 @@ PAT loops the open clip on its own while the piano roll is shown; SONG plays the
 - Step sequencer
 - Kit presets
 - Pattern generator: genre, major/minor, chords/melody/bass, new variation
+
+Built in phase 4. A drum track has a 16-pad kit; each pad sits on a General MIDI drum note, so
+drum clips are note clips and drum MIDI files (and channel 10 of any MIDI file) land on the right
+pads. Every pad has a synthesized sound (no sample packs are bundled) with tune, decay and level;
+drop a one-shot from the library or a WAV/MP3 on a pad to use it instead. Kit presets (Standard,
+Trap, Lo-fi, Latin, Rock) retune the synthesized pads. The step sequencer works in 1/8, 1/16 or
+1/32 steps: click or drag to add steps (Shift for an accent), drag from a filled step or
+right-click to remove, Alt+click to change a step's velocity. The pattern generator (genres:
+Reggaeton, Trap, Trap latino, Hip hop, Lo-fi, Ballad, Corrido tumbado, Rock) writes drums into the
+clip and chords, melody and bass onto MIDI tracks named after them, in a chosen key and major or
+minor; "New variation" makes another take. PAT/SONG works as in the piano roll.
 
 ## 8. Mixer
 - Channel strips

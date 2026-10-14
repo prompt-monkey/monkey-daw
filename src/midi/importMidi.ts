@@ -21,13 +21,20 @@ async function readParts(file: File): Promise<MidiPart[] | null> {
 
 const withIds = (notes: MidiPart['notes']): Note[] => notes.map((n) => createNote(n))
 
-/** Adds one MIDI track per part of the file, with its clip starting at `start`. */
+/**
+ * Adds one track per part of the file, with its clip starting at `start`. Channel 10 parts
+ * (General MIDI drums) become drum tracks.
+ */
 export async function importMidiAsTracks(file: File, start: number): Promise<Id[]> {
   const parts = await readParts(file)
   if (!parts) return []
   const base = file.name.replace(MIDI_FILE, '')
   return addMidiTracks(
-    parts.map((p) => ({ name: parts.length === 1 ? base : p.name, notes: withIds(p.notes) })),
+    parts.map((p) => ({
+      name: parts.length === 1 ? base : p.name,
+      notes: withIds(p.notes),
+      kind: p.channel === 9 ? ('drums' as const) : ('midi' as const),
+    })),
     start,
   )
 }

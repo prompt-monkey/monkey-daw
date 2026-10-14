@@ -52,6 +52,38 @@ export const BUILT_IN_PRESETS: ChainPreset[] = [
     ],
   },
   {
+    name: 'Slap vocal',
+    chain: [
+      { type: 'eq', params: { lowCut: 100, highGain: 2, highFreq: 9000 } },
+      { type: 'compressor', params: { threshold: -18, ratio: 3, attack: 10, release: 120, makeup: 3 } },
+      { type: 'slapback', params: { time: 110, tone: 3500, mix: 22 } },
+      { type: 'plate', params: { decay: 1.4, preDelay: 20, mix: 15 } },
+    ],
+  },
+  {
+    name: 'Wide pad',
+    chain: [
+      { type: 'chorus', params: { rate: 0.4, depth: 50, width: 90, mix: 45 } },
+      { type: 'spread', params: { amount: 40, time: 14 } },
+      { type: 'plate', params: { decay: 3, preDelay: 30, tone: 7000, mix: 30 } },
+    ],
+  },
+  {
+    name: 'Lo-fi keys',
+    chain: [
+      { type: 'tape', params: { wobble: 45, flutter: 25, wear: 50 } },
+      { type: 'bitcrusher', params: { bits: 10, downsample: 2, mix: 40 } },
+      { type: 'tilt', params: { tilt: -2.5, pivot: 900 } },
+    ],
+  },
+  {
+    name: 'Pumping bus',
+    chain: [
+      { type: 'duck', params: { rate: '1/4', depth: 65, release: 70 } },
+      { type: 'clipper', params: { drive: 2, ceiling: -0.5, softness: 60 } },
+    ],
+  },
+  {
     name: 'Glue bus',
     chain: [
       { type: 'compressor', params: { threshold: -12, ratio: 2, knee: 10, attack: 30, release: 200, makeup: 1 } },

@@ -52,7 +52,14 @@ const MAX_TAIL = 10
 
 function effectTail(effect: Effect, bpm: number): number {
   if (!effect.enabled) return 0
-  if (effect.type === 'reverb') return (effect.params.decay as number) + (effect.params.preDelay as number) / 1000
+  if (effect.type === 'reverb' || effect.type === 'plate') {
+    return (effect.params.decay as number) + (effect.params.preDelay as number) / 1000
+  }
+  if (effect.type === 'slapback') {
+    const feedback = (effect.params.feedback as number) / 100
+    const repeats = feedback > 0.01 ? Math.ceil(Math.log(0.001) / Math.log(feedback)) : 1
+    return ((effect.params.time as number) / 1000) * repeats
+  }
   if (effect.type === 'delay') {
     // Echoes until they are 60 dB down: each repeat is multiplied by the feedback.
     const feedback = Math.max(0.01, (effect.params.feedback as number) / 100)

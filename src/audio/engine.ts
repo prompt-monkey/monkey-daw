@@ -195,6 +195,7 @@ export class AudioEngine {
         }
       }
       mix.scheduleAutomation(project, window, ctxOffset)
+      mix.scheduleEffects(project, window, ctxOffset)
       for (const ev of clipEvents(project, window)) {
         const source = clipBuffer(project, this.assets, ev.clip.assetId, ev.rate)
         if (!source) continue

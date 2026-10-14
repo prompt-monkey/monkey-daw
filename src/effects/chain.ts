@@ -2,7 +2,9 @@
 // project's effect list creates, updates, removes and rewires instances as needed.
 
 import type { Effect, Id } from '../model/types'
+import { EFFECTS } from './definitions'
 import { createEffectInstance, type Binding, type EffectInstance } from './nodes'
+import type { ScheduleWindow } from './parts'
 
 interface Entry {
   effect: Effect
@@ -47,7 +49,7 @@ export class EffectChain {
         const instance = createEffectInstance(this.ctx, effect)
         instance.update(effect.params, bpm, true, keys)
         this.entries.set(effect.id, { effect, bpm, automated: signature, instance })
-      } else if (entry.effect !== effect || entry.automated !== signature || (entry.bpm !== bpm && effect.type === 'delay')) {
+      } else if (entry.effect !== effect || entry.automated !== signature || (entry.bpm !== bpm && EFFECTS[effect.type].sync)) {
         entry.instance.update(effect.params, bpm, immediate, keys)
         entry.effect = effect
         entry.bpm = bpm
@@ -67,6 +69,14 @@ export class EffectChain {
     }
     node.connect(this.output)
     this.wired = active
+  }
+
+  /** Lets effects that follow the song position (sidechain duck) schedule a window. */
+  schedule(window: ScheduleWindow, ctxOffset: number, bpm: number) {
+    for (const id of this.wired ?? []) {
+      const entry = this.entries.get(id)
+      entry?.instance.schedule?.(window, ctxOffset, entry.effect.params, bpm)
+    }
   }
 
   /** The AudioParams an effect parameter drives, for automation. */

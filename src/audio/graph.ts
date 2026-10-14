@@ -199,6 +199,12 @@ export class MixGraph {
     }
   }
 
+  /** Schedules effects that follow the song position (sidechain duck) on every channel. */
+  scheduleEffects(project: Project, window: { from: number; to: number; catchUp: boolean }, ctxOffset: number) {
+    for (const strip of [...this.tracks.values(), ...this.buses.values()]) strip.chain.schedule(window, ctxOffset, project.bpm)
+    this.masterChain.schedule(window, ctxOffset, project.bpm)
+  }
+
   /** The AudioParams an automation target drives, with the map from its real value. */
   private automationBindings(
     track: Track,

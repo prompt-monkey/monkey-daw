@@ -39,6 +39,7 @@ export async function renderProject(
   const mix = new MixGraph(ctx)
   mix.sync(project, true, range.start)
   mix.scheduleAutomation(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
+  mix.scheduleEffects(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
   const window = { from: range.start, to: range.end, catchUp: true, cutAt: range.end }
   for (const ev of clipEvents(project, window)) {
     const source = clipBuffer(project, assets, ev.clip.assetId, ev.rate)

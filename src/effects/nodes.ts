@@ -5,31 +5,15 @@
 // value maps onto them. Normal updates and automation both go through the same bindings.
 
 import type { Effect, EffectParams } from '../model/types'
+import { CHARACTER_BUILDERS } from './character'
+import crusherWorkletUrl from './crusher.worklet.ts?worker&url'
 import { delaySeconds } from './definitions'
-import { dbToGain, mixGains, reverbImpulse, saturationCurve, seedFromId } from './dsp'
+import { dbToGain, reverbImpulse, saturationCurve, seedFromId } from './dsp'
 import gateWorkletUrl from './gate.worklet.ts?worker&url'
+import { disconnectAll, dryWet, identity, instance, nyquistSafe, type Binding, type EffectInstance } from './parts'
 
-/** One AudioParam driven by an effect parameter. */
-export interface Binding {
-  param: AudioParam
-  /** AudioParam value for a parameter value (given all params and the tempo, for synced times). */
-  map: (value: number, params: EffectParams, bpm: number) => number
-}
+export type { Binding, EffectInstance } from './parts'
 
-export interface EffectInstance {
-  input: AudioNode
-  output: AudioNode
-  /**
-   * Applies parameter values. `immediate` skips smoothing (offline renders, new nodes). Keys in
-   * `automated` are left alone: automation drives them.
-   */
-  update: (params: EffectParams, bpm: number, immediate: boolean, automated?: ReadonlySet<string>) => void
-  /** The AudioParams a parameter drives (empty if it can't be automated). */
-  bindings: (key: string) => Binding[]
-  dispose: () => void
-}
-
-const SMOOTHING = 0.015
 const MAX_DELAY = 3
 /** Frames Web Audio processes at a time; feedback loops add this much delay. */
 const RENDER_QUANTUM = 128
@@ -40,78 +24,12 @@ const loaded = new WeakMap<BaseAudioContext, Promise<void>>()
 export function ensureEffectWorklets(ctx: BaseAudioContext): Promise<void> {
   let promise = loaded.get(ctx)
   if (!promise) {
-    promise = ctx.audioWorklet.addModule(gateWorkletUrl).catch((err) => {
-      console.warn('Gate effect unavailable', err)
-    })
+    const load = (url: string, name: string) =>
+      ctx.audioWorklet.addModule(url).catch((err) => console.warn(`${name} effect unavailable`, err))
+    promise = Promise.all([load(gateWorkletUrl, 'Gate'), load(crusherWorkletUrl, 'Bitcrusher')]).then(() => {})
     loaded.set(ctx, promise)
   }
   return promise
-}
-
-export function setParam(ctx: BaseAudioContext, param: AudioParam, value: number, immediate: boolean) {
-  if (immediate) {
-    param.cancelScheduledValues(0)
-    param.value = value
-  } else {
-    // Drop ramps still scheduled (e.g. from automation that was just removed), then glide.
-    param.cancelScheduledValues(ctx.currentTime)
-    param.setTargetAtTime(value, ctx.currentTime, SMOOTHING)
-  }
-}
-
-const disconnectAll = (nodes: AudioNode[]) => nodes.forEach((node) => node.disconnect())
-
-/** Keeps frequencies just below Nyquist, where filters stop being valid. */
-const nyquistSafe = (ctx: BaseAudioContext) => (hz: number) => Math.min(hz, ctx.sampleRate / 2 - 100)
-const identity = (v: number) => v
-
-/** Input split into a dry path and a wet path, summed at the output with an equal-power mix. */
-function dryWet(ctx: BaseAudioContext) {
-  const input = ctx.createGain()
-  const dry = ctx.createGain()
-  const wet = ctx.createGain()
-  const output = ctx.createGain()
-  input.connect(dry).connect(output)
-  wet.connect(output)
-  return {
-    input,
-    output,
-    /** Connect the end of the wet chain here. */
-    wet,
-    mixBindings: [
-      { param: dry.gain, map: (percent: number) => mixGains(percent / 100).dry },
-      { param: wet.gain, map: (percent: number) => mixGains(percent / 100).wet },
-    ] as Binding[],
-    nodes: [input, dry, wet, output] as AudioNode[],
-  }
-}
-
-interface Parts {
-  input: AudioNode
-  output: AudioNode
-  bindings: () => Record<string, Binding[]>
-  /** Non-numeric or structural changes (filter type, ping-pong, impulse, curve). */
-  configure?: (params: EffectParams, bpm: number) => boolean | void
-  nodes: () => AudioNode[]
-}
-
-/** Turns an effect's parts into an EffectInstance with the shared update logic. */
-function instance(ctx: BaseAudioContext, parts: Parts): EffectInstance {
-  return {
-    input: parts.input,
-    output: parts.output,
-    update(params, bpm, immediate, automated) {
-      // A structural rebuild creates fresh nodes, which take their values immediately.
-      const rebuilt = parts.configure?.(params, bpm) === true
-      for (const [key, bindings] of Object.entries(parts.bindings())) {
-        if (automated?.has(key)) continue
-        const value = params[key] as number
-        for (const b of bindings) setParam(ctx, b.param, b.map(value, params, bpm), immediate || rebuilt)
-      }
-    },
-    bindings: (key) => parts.bindings()[key] ?? [],
-    dispose: () => disconnectAll(parts.nodes()),
-  }
 }
 
 function eq(ctx: BaseAudioContext): EffectInstance {
@@ -372,6 +290,7 @@ const BUILDERS: Record<Effect['type'], (ctx: BaseAudioContext, effect: Effect) =
   reverb,
   saturation,
   gate,
+  ...CHARACTER_BUILDERS,
 }
 
 export function createEffectInstance(ctx: BaseAudioContext, effect: Effect): EffectInstance {

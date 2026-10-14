@@ -40,7 +40,7 @@ describe('effect definitions', () => {
       params: { lowGain: 18, midFreq: 1000, highGain: 0 },
     })
     expect(normalizeEffect({ id: 'fx2', type: 'filter', enabled: false, params: { mode: 'notch' } })?.params.mode).toBe('lowpass')
-    expect(normalizeEffect({ id: 'fx3', type: 'chorus' })).toBeNull()
+    expect(normalizeEffect({ id: 'fx3', type: 'kazoo' })).toBeNull()
     expect(normalizeEffect(null)).toBeNull()
   })
 })

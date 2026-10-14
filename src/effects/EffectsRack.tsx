@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import type { Effect, Id } from '../model/types'
+import type { Effect, EffectType, Id } from '../model/types'
 import {
   addAutomationLane,
   addEffect,
@@ -18,7 +18,8 @@ import { Menu } from '../ui/Menu'
 import { toast } from '../ui/toast'
 import { effectTarget } from '../automation/targets'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
-import { EFFECTS, EFFECT_TYPES, delaySeconds, fromNormalized, type ChoiceParam, type NumberParam } from './definitions'
+import { Dialog } from '../ui/Dialog'
+import { EFFECTS, EFFECT_TYPES, formatValue, fromNormalized, syncedValue, type ChoiceParam, type NumberParam } from './definitions'
 import { BUILT_IN_PRESETS, deleteUserPreset, saveUserPreset, useUserPresets } from './presets'
 
 /** Drag-and-drop data type carrying the id of an effect being reordered. */
@@ -97,7 +98,8 @@ const EffectCard = memo(function EffectCard({
   const [dragging, setDragging] = useState(false)
   const def = EFFECTS[effect.type]
   const set = (key: string, value: number | string | boolean) => setEffectParam(channel, effect.id, key, value)
-  const synced = effect.type === 'delay' && effect.params.sync !== 'off'
+  // A tempo-synced number (delay time, tremolo rate) shows the note length's value instead.
+  const synced = syncedValue(effect.type, effect.params, bpm)
   const sideAt = (e: React.DragEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
     return e.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
@@ -179,7 +181,7 @@ const EffectCard = memo(function EffectCard({
       <div className="grid auto-cols-max grid-flow-col grid-rows-2 gap-x-1 gap-y-2">
         {def.params.map((p) => {
           if (p.kind === 'number') {
-            const timeSynced = synced && p.key === 'time'
+            const isSynced = synced !== null && def.sync?.param === p.key
             return (
               <ParamKnob
                 key={p.key}
@@ -188,8 +190,10 @@ const EffectCard = memo(function EffectCard({
                 def={p as NumberParam}
                 onChange={(v) => set(p.key, v)}
                 onCommit={endGesture}
-                disabled={timeSynced}
-                display={timeSynced ? `${Math.round(delaySeconds(effect.params, bpm) * 1000)} ms` : undefined}
+                disabled={isSynced}
+                display={
+                  isSynced ? (def.sync!.as === 'time' ? `${Math.round(synced! * 1000)} ms` : formatValue(p as NumberParam, synced!)) : undefined
+                }
               />
             )
           }
@@ -270,7 +274,40 @@ function PresetMenu({ channel, effects, channelName }: { channel: ChannelRef; ef
 }
 
 /** The effect chain of one channel: cards in signal order, left to right. */
+const GROUPS = [
+  { id: 'essentials', title: 'Essentials' },
+  { id: 'character', title: 'Character and space' },
+] as const
+
+/** Every effect, by group, with what it does. */
+function EffectPicker({ onPick, onClose }: { onPick: (type: EffectType) => void; onClose: () => void }) {
+  return (
+    <Dialog title="Add effect" onClose={onClose} wide>
+      <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto pr-1">
+        {GROUPS.map((group) => (
+          <section key={group.id}>
+            <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-accent uppercase">{group.title}</h3>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {EFFECT_TYPES.filter((t) => EFFECTS[t].group === group.id).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => onPick(type)}
+                  className="flex flex-col items-start gap-0.5 rounded-md border border-line px-2.5 py-1.5 text-left hover:border-accent hover:bg-surface-2"
+                >
+                  <span className="text-sm font-semibold">{EFFECTS[type].name}</span>
+                  <span className="text-[11px] leading-snug text-text-dim">{EFFECTS[type].description}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </Dialog>
+  )
+}
+
 export function EffectsRack() {
+  const [picking, setPicking] = useState(false)
   const channel = useViewStore((s) => s.rackChannel)
   const openRack = useViewStore((s) => s.openRack)
   const tracks = useProjectStore((s) => s.project.tracks)
@@ -330,14 +367,22 @@ export function EffectsRack() {
           <EffectCard key={effect.id} channel={ref} effect={effect} index={i} count={chain.effects.length} bpm={bpm} />
         ))}
         <div className="flex shrink-0 flex-col items-center gap-2 self-center">
-          <Menu
-            label="Add effect"
+          <button
             className="rounded-lg border border-dashed border-line px-4 py-6 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
-            items={EFFECT_TYPES.map((type) => ({ label: `${EFFECTS[type].name} — ${EFFECTS[type].description}`, onSelect: () => addEffect(ref, type) }))}
+            onClick={() => setPicking(true)}
           >
             + Add effect
-          </Menu>
+          </button>
         </div>
+        {picking && (
+          <EffectPicker
+            onPick={(type) => {
+              addEffect(ref, type)
+              setPicking(false)
+            }}
+            onClose={() => setPicking(false)}
+          />
+        )}
         <div className="self-center text-[11px] text-text-dim">→ {ref === 'master' ? 'Speakers' : 'Pan & fader'}</div>
       </div>
     </div>

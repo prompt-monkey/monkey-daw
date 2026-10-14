@@ -182,7 +182,30 @@ export interface AutomationLane {
   points: AutomationPoint[]
 }
 
-export type EffectType = 'eq' | 'compressor' | 'filter' | 'delay' | 'reverb' | 'saturation' | 'gate'
+export type EffectType =
+  // Batch 1: essentials.
+  | 'eq'
+  | 'compressor'
+  | 'filter'
+  | 'delay'
+  | 'reverb'
+  | 'saturation'
+  | 'gate'
+  // Batch 2: character and space.
+  | 'chorus'
+  | 'phaser'
+  | 'tremolo'
+  | 'vibrato'
+  | 'tape'
+  | 'bitcrusher'
+  | 'clipper'
+  | 'tilt'
+  | 'air'
+  | 'midside'
+  | 'slapback'
+  | 'plate'
+  | 'spread'
+  | 'duck'
 
 /** Parameter values: numbers in real units (Hz, dB, ms…), choices as strings, toggles as booleans. */
 export type EffectParams = Record<string, number | string | boolean>

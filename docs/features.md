@@ -5,8 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–5 are built. Every step has unit tests (218 in total) and was checked in Chrome. Phase 6
-(effects batches 2 and 3) is what's left.
+Phases 0–5 and effects batch 2 are built. Every step has unit tests (228 in total) and was checked
+in Chrome. Effects batch 3 is what's left.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -24,8 +24,9 @@ Phases 0–5 are built. Every step has unit tests (218 in total) and was checked
 | 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `96f4544` |
 | 5 | Export: MP3, stems as a ZIP | Done | `dad7618` |
 | 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | `3d54e4b` |
-| 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | |
-| 6 | Effects batches 2 and 3 | Next (deferred to the end) | |
+| 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | `73d7ab2` |
+| 6 | Effects batch 2: character and space (14 effects) | Done | |
+| 6 | Effects batch 3: specialist | Next | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: reverse, pitch shift and free stretching of clips, curved clip fades, consolidate
@@ -144,8 +145,8 @@ minor; "New variation" makes another take. PAT/SONG works as in the piano roll.
 - VU meter and input meter
 
 ## 9. Effects rack
-The rack is built in three batches. Only the rack and batch 1 are built in phase 3; batches 2 and 3
-are deferred to the end of the project (see "Deferred to the end" below).
+The rack is built in three batches. The rack and batch 1 were built in phase 3, batch 2 in phase 6;
+batch 3 is still to do.
 
 **Rack (phase 3)**
 - Ordered effect chain per track, bus and master: add, remove, drag to reorder
@@ -169,12 +170,31 @@ are deferred to the end of the project (see "Deferred to the end" below).
 | Saturation | Drive, tone, output, mix |
 | Gate | Threshold, attack, release, range |
 
-**Batch 2: character and space (deferred to the end)**
-- Stereo width / chorus, phaser / flanger, tremolo / auto-pan, vibrato
-- Tape (wobble and wear), bitcrusher, soft clipper
-- Tilt EQ, air (high-end lift), mid/side balance
-- Slapback, plate reverb, stereo spread
-- Sidechain duck (BPM-synced pumping, no sidechain input needed)
+**Batch 2: character and space (phase 6)**
+| Effect | Parameters |
+|---|---|
+| Chorus | Rate, depth, delay, width (left and right move apart), mix |
+| Phaser / Flanger | Type, rate, depth, feedback, mix |
+| Tremolo / Auto-pan | Type, sync (free or a note length), rate, depth, shape (smooth, triangle, choppy) |
+| Vibrato | Rate, depth (up to a semitone) |
+| Tape | Wobble (slow wow), flutter, wear (duller highs and hiss), mix |
+| Bitcrusher | Bits, downsample, mix (an AudioWorklet) |
+| Soft clipper | Drive, ceiling, softness |
+| Tilt EQ | Tilt, pivot |
+| Air | Amount, frequency |
+| Mid/Side | Mid level, side level (widen or narrow) |
+| Slapback | Time, tone, feedback, mix |
+| Plate reverb | Decay, pre-delay, tone, low cut, mix (a generated plate impulse) |
+| Stereo spread | Amount, time (a Haas delay on one side) |
+| Sidechain duck | Every (1/2 to 1/16), depth, release; pumps on the song's beat grid |
+
+The "+ Add effect" button opens a picker grouped into Essentials and Character and space. Tempo
+sync now covers the tremolo's rate as well as the delay's time. The sidechain duck is scheduled
+with the song position like automation, so it lands on the beat live and in exports. New
+built-in presets: Slap vocal, Wide pad, Lo-fi keys and Pumping bus. Plate decay, the clipper's
+softness and the duck's depth and release can't be automated (they reshape audio data or
+schedules); the other new knobs can. Tremolo and the other LFOs run free in phase (only their rate
+follows the tempo).
 
 **Batch 3: specialist, AudioWorklet-based (deferred to the end)**
 - Transient shaper, de-esser, optical-style compressor

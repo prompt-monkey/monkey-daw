@@ -4,7 +4,7 @@
 import { createId } from '../model/factory'
 import type { Effect, EffectParams, EffectType } from '../model/types'
 
-export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q'
+export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x'
 
 export interface NumberParam {
   kind: 'number'
@@ -42,7 +42,24 @@ export interface EffectDef {
   name: string
   description: string
   params: ParamDef[]
+  /**
+   * A choice that locks a number to the tempo: while the choice isn't 'off', `param` follows the
+   * note length instead of its knob ('time' in seconds or 'rate' in Hz).
+   */
+  sync?: { choice: string; param: string; as: 'time' | 'rate' }
+  /** Batch 2 (character and space) or batch 1 (essentials); the rack lists them in groups. */
+  group: 'essentials' | 'character'
 }
+
+const fixed = (p: NumberParam): NumberParam => ({ ...p, automatable: false })
+
+const syncChoice = (fallback: string, divisions: string[] = Object.keys(SYNC_DIVISIONS)): ChoiceParam => ({
+  kind: 'choice',
+  key: 'sync',
+  label: 'Sync',
+  options: [{ value: 'off', label: 'Free' }, ...divisions.map((v) => ({ value: v, label: v }))],
+  default: fallback,
+})
 
 const num = (key: string, label: string, min: number, max: number, def: number, unit: ParamUnit, scale: 'linear' | 'log' = 'linear'): NumberParam => ({
   kind: 'number',
@@ -70,6 +87,7 @@ export const SYNC_DIVISIONS: Record<string, number> = {
 export const EFFECTS: Record<EffectType, EffectDef> = {
   eq: {
     type: 'eq',
+    group: 'essentials',
     name: 'EQ',
     description: 'Shape the tone: low and high shelves, a sweepable mid, and low/high cut filters.',
     params: [
@@ -86,6 +104,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   compressor: {
     type: 'compressor',
+    group: 'essentials',
     name: 'Compressor',
     description: 'Evens out the level: loud parts are turned down above the threshold.',
     params: [
@@ -100,6 +119,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   filter: {
     type: 'filter',
+    group: 'essentials',
     name: 'Filter',
     description: 'Removes highs (low-pass), lows (high-pass), or keeps a band.',
     params: [
@@ -121,16 +141,12 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   delay: {
     type: 'delay',
+    group: 'essentials',
     name: 'Delay',
     description: 'Echoes, free or locked to the tempo; ping-pong bounces them left and right.',
+    sync: { choice: 'sync', param: 'time', as: 'time' },
     params: [
-      {
-        kind: 'choice',
-        key: 'sync',
-        label: 'Sync',
-        options: [{ value: 'off', label: 'Free' }, ...Object.keys(SYNC_DIVISIONS).map((v) => ({ value: v, label: v }))],
-        default: '1/8',
-      },
+      syncChoice('1/8'),
       num('time', 'Time', 1, 2000, 375, 'ms', 'log'),
       num('feedback', 'Feedback', 0, 95, 35, '%'),
       num('tone', 'Tone', 500, 20000, 6000, 'Hz', 'log'),
@@ -140,6 +156,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   reverb: {
     type: 'reverb',
+    group: 'essentials',
     name: 'Reverb',
     description: 'Room and hall ambience.',
     params: [
@@ -151,6 +168,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   saturation: {
     type: 'saturation',
+    group: 'essentials',
     name: 'Saturation',
     description: 'Warm drive, from subtle thickening to heavy distortion.',
     params: [
@@ -162,6 +180,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
   },
   gate: {
     type: 'gate',
+    group: 'essentials',
     name: 'Gate',
     description: 'Silences the signal below the threshold: removes noise and spill between notes.',
     params: [
@@ -171,6 +190,201 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
       num('range', 'Range', -80, 0, -80, 'dB'),
     ],
   },
+
+  // --- Batch 2: character and space -----------------------------------------------------------
+  chorus: {
+    type: 'chorus',
+    group: 'character',
+    name: 'Chorus',
+    description: 'Thickens and widens with gently detuned, moving copies.',
+    params: [
+      num('rate', 'Rate', 0.05, 5, 0.8, 'Hz', 'log'),
+      num('depth', 'Depth', 0, 100, 40, '%'),
+      num('delay', 'Delay', 5, 30, 12, 'ms'),
+      num('width', 'Width', 0, 100, 70, '%'),
+      num('mix', 'Mix', 0, 100, 50, '%'),
+    ],
+  },
+  phaser: {
+    type: 'phaser',
+    group: 'character',
+    name: 'Phaser / Flanger',
+    description: 'Sweeping, swirling movement: soft notches (phaser) or a jet-like comb (flanger).',
+    params: [
+      {
+        kind: 'choice',
+        key: 'mode',
+        label: 'Type',
+        options: [
+          { value: 'phaser', label: 'Phaser' },
+          { value: 'flanger', label: 'Flanger' },
+        ],
+        default: 'phaser',
+      },
+      num('rate', 'Rate', 0.05, 10, 0.5, 'Hz', 'log'),
+      num('depth', 'Depth', 0, 100, 70, '%'),
+      num('feedback', 'Feedback', 0, 90, 40, '%'),
+      num('mix', 'Mix', 0, 100, 50, '%'),
+    ],
+  },
+  tremolo: {
+    type: 'tremolo',
+    group: 'character',
+    name: 'Tremolo / Auto-pan',
+    description: 'Pulses the volume (tremolo) or moves the sound left and right (auto-pan), free or in time.',
+    sync: { choice: 'sync', param: 'rate', as: 'rate' },
+    params: [
+      {
+        kind: 'choice',
+        key: 'mode',
+        label: 'Type',
+        options: [
+          { value: 'tremolo', label: 'Tremolo' },
+          { value: 'autopan', label: 'Auto-pan' },
+        ],
+        default: 'tremolo',
+      },
+      syncChoice('1/8'),
+      num('rate', 'Rate', 0.1, 20, 4, 'Hz', 'log'),
+      num('depth', 'Depth', 0, 100, 50, '%'),
+      {
+        kind: 'choice',
+        key: 'shape',
+        label: 'Shape',
+        options: [
+          { value: 'sine', label: 'Smooth' },
+          { value: 'triangle', label: 'Triangle' },
+          { value: 'square', label: 'Choppy' },
+        ],
+        default: 'sine',
+      },
+    ],
+  },
+  vibrato: {
+    type: 'vibrato',
+    group: 'character',
+    name: 'Vibrato',
+    description: 'Wobbles the pitch, like a singer’s or a guitarist’s vibrato.',
+    params: [num('rate', 'Rate', 0.5, 12, 5, 'Hz', 'log'), num('depth', 'Depth', 0, 100, 30, '%')],
+  },
+  tape: {
+    type: 'tape',
+    group: 'character',
+    name: 'Tape',
+    description: 'Old tape: slow wobble, fast flutter, and wear that dulls the highs and adds hiss.',
+    params: [
+      num('wobble', 'Wobble', 0, 100, 25, '%'),
+      num('flutter', 'Flutter', 0, 100, 15, '%'),
+      num('wear', 'Wear', 0, 100, 30, '%'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
+    ],
+  },
+  bitcrusher: {
+    type: 'bitcrusher',
+    group: 'character',
+    name: 'Bitcrusher',
+    description: 'Lo-fi digital grit: fewer bits and a lower sample rate.',
+    params: [
+      num('bits', 'Bits', 1, 16, 8, 'bits'),
+      num('downsample', 'Downsample', 1, 32, 4, 'x', 'log'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
+    ],
+  },
+  clipper: {
+    type: 'clipper',
+    group: 'character',
+    name: 'Soft clipper',
+    description: 'Rounds off peaks so the sound gets louder without harsh overs.',
+    params: [
+      num('drive', 'Drive', 0, 24, 0, 'dB'),
+      num('ceiling', 'Ceiling', -12, 0, -0.3, 'dB'),
+      fixed(num('softness', 'Softness', 0, 100, 50, '%')),
+    ],
+  },
+  tilt: {
+    type: 'tilt',
+    group: 'character',
+    name: 'Tilt EQ',
+    description: 'One knob for tone: tilts toward brighter (right) or darker (left) around a pivot.',
+    params: [num('tilt', 'Tilt', -6, 6, 0, 'dB'), num('pivot', 'Pivot', 200, 5000, 800, 'Hz', 'log')],
+  },
+  air: {
+    type: 'air',
+    group: 'character',
+    name: 'Air',
+    description: 'A gentle lift of the very top end for openness and sparkle.',
+    params: [num('amount', 'Amount', 0, 12, 3, 'dB'), num('freq', 'Freq', 8000, 20000, 12000, 'Hz', 'log')],
+  },
+  midside: {
+    type: 'midside',
+    group: 'character',
+    name: 'Mid/Side',
+    description: 'Balances the centre (mid) against the sides: turn the sides up to widen, down to narrow.',
+    params: [num('mid', 'Mid', -12, 6, 0, 'dB'), num('side', 'Side', -24, 12, 0, 'dB')],
+  },
+  slapback: {
+    type: 'slapback',
+    group: 'character',
+    name: 'Slapback',
+    description: 'One quick echo, the classic rockabilly and vocal slap.',
+    params: [
+      num('time', 'Time', 40, 250, 110, 'ms'),
+      num('tone', 'Tone', 1000, 12000, 4000, 'Hz', 'log'),
+      num('feedback', 'Feedback', 0, 40, 0, '%'),
+      num('mix', 'Mix', 0, 100, 25, '%'),
+    ],
+  },
+  plate: {
+    type: 'plate',
+    group: 'character',
+    name: 'Plate reverb',
+    description: 'A dense, bright plate: smooth on vocals and snares.',
+    params: [
+      fixed(num('decay', 'Decay', 0.3, 6, 1.8, 's', 'log')),
+      num('preDelay', 'Pre-delay', 0, 150, 0, 'ms'),
+      num('tone', 'Tone', 2000, 20000, 9000, 'Hz', 'log'),
+      num('lowCut', 'Low cut', 20, 1000, 150, 'Hz', 'log'),
+      num('mix', 'Mix', 0, 100, 25, '%'),
+    ],
+  },
+  spread: {
+    type: 'spread',
+    group: 'character',
+    name: 'Stereo spread',
+    description: 'Makes a mono sound wide by delaying one side a few milliseconds.',
+    params: [num('amount', 'Amount', 0, 100, 50, '%'), num('time', 'Time', 2, 30, 12, 'ms')],
+  },
+  duck: {
+    type: 'duck',
+    group: 'character',
+    name: 'Sidechain duck',
+    description: 'Pumps the volume in time with the beat, like a kick-triggered sidechain.',
+    params: [
+      {
+        kind: 'choice',
+        key: 'rate',
+        label: 'Every',
+        options: ['1/2', '1/4', '1/8', '1/16'].map((v) => ({ value: v, label: v })),
+        default: '1/4',
+      },
+      fixed(num('depth', 'Depth', 0, 100, 60, '%')),
+      fixed(num('release', 'Release', 10, 100, 60, '%')),
+    ],
+  },
+}
+
+/** Seconds between duck pulses. */
+export function duckInterval(params: EffectParams, bpm: number): number {
+  return ((SYNC_DIVISIONS[params.rate as string] ?? 1) * 60) / bpm
+}
+
+/** A tempo-synced number's value (seconds or Hz), or null when the effect runs free. */
+export function syncedValue(type: EffectType, params: EffectParams, bpm: number): number | null {
+  const sync = EFFECTS[type].sync
+  const division = sync && SYNC_DIVISIONS[params[sync.choice] as string]
+  if (!sync || !division) return null
+  const seconds = (division * 60) / bpm
+  return sync.as === 'time' ? seconds : 1 / seconds
 }
 
 export const EFFECT_TYPES = Object.keys(EFFECTS) as EffectType[]
@@ -242,6 +456,12 @@ export function delaySeconds(params: EffectParams, bpm: number): number {
   return division ? (division * 60) / bpm : (params.time as number) / 1000
 }
 
+/** LFO rate in Hz: one cycle per synced note length, or the free rate. */
+export function lfoRate(params: EffectParams, bpm: number): number {
+  const division = SYNC_DIVISIONS[params.sync as string]
+  return division ? bpm / 60 / division : (params.rate as number)
+}
+
 /** Human-readable value, e.g. "1.2 kHz", "-6.0 dB", "4.0:1", "250 ms". */
 export function formatValue(def: NumberParam, value: number): string {
   switch (def.unit) {
@@ -259,5 +479,9 @@ export function formatValue(def: NumberParam, value: number): string {
       return `${value.toFixed(1)}:1`
     case 'Q':
       return value.toFixed(2)
+    case 'bits':
+      return `${Math.floor(value)} bit`
+    case 'x':
+      return `${value < 10 ? value.toFixed(1) : Math.round(value)}×`
   }
 }

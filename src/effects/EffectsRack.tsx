@@ -38,26 +38,32 @@ const EffectCard = memo(function EffectCard({
 }) {
   const endGesture = useProjectStore((s) => s.endGesture)
   const [dropSide, setDropSide] = useState<'before' | 'after' | null>(null)
+  const [dragging, setDragging] = useState(false)
   const def = EFFECTS[effect.type]
   const set = (key: string, value: number | string | boolean) => setEffectParam(channel, effect.id, key, value)
   const synced = effect.type === 'delay' && effect.params.sync !== 'off'
+  const sideAt = (e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    return e.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
+  }
 
   return (
     <article
       className={`relative flex shrink-0 flex-col gap-2 rounded-lg border bg-surface p-2.5 ${
         effect.enabled ? 'border-line' : 'border-line opacity-60'
-      }`}
+      } ${dragging ? 'opacity-40' : ''}`}
       aria-label={`${def.name} effect`}
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) return
         e.preventDefault()
-        const rect = e.currentTarget.getBoundingClientRect()
-        setDropSide(e.clientX < rect.left + rect.width / 2 ? 'before' : 'after')
+        e.dataTransfer.dropEffect = 'move'
+        setDropSide(sideAt(e))
       }}
-      onDragLeave={() => setDropSide(null)}
+      // Only clear the marker when the pointer leaves the card, not when it crosses a knob inside it.
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropSide(null)}
       onDrop={(e) => {
         const id = e.dataTransfer.getData(EFFECT_DRAG_TYPE)
-        const side = dropSide
+        const side = sideAt(e)
         setDropSide(null)
         if (!id || id === effect.id) return
         e.preventDefault()
@@ -72,16 +78,23 @@ const EffectCard = memo(function EffectCard({
       {dropSide && (
         <div className={`absolute inset-y-1 w-0.5 rounded bg-accent ${dropSide === 'before' ? '-left-1.5' : '-right-1.5'}`} />
       )}
-      <header className="flex items-center gap-1.5">
-        <span
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData(EFFECT_DRAG_TYPE, effect.id)
-            e.dataTransfer.effectAllowed = 'move'
-          }}
-          className="cursor-grab text-text-dim/60 hover:text-text"
-          title="Drag to reorder"
-        >
+      {/* The whole header is the drag handle; drags that start on its buttons are ignored. */}
+      <header
+        draggable
+        onDragStart={(e) => {
+          if ((e.target as HTMLElement).closest('button')) {
+            e.preventDefault()
+            return
+          }
+          e.dataTransfer.setData(EFFECT_DRAG_TYPE, effect.id)
+          e.dataTransfer.effectAllowed = 'move'
+          setDragging(true)
+        }}
+        onDragEnd={() => setDragging(false)}
+        className="group/header -mx-1 flex cursor-grab items-center gap-1.5 rounded px-1 py-0.5 hover:bg-surface-2 active:cursor-grabbing"
+        title="Drag to reorder"
+      >
+        <span className="text-text-dim/60 group-hover/header:text-text" aria-hidden>
           ⠿
         </span>
         <button
@@ -251,7 +264,7 @@ export function EffectsRack() {
         </button>
         <PresetMenu channel={ref} effects={chain.effects} channelName={chain.name} />
         <span className="flex-1" />
-        <span className="text-[11px] text-text-dim">Signal flows left to right · drag ⠿ to reorder</span>
+        <span className="text-[11px] text-text-dim">Signal flows left to right · drag an effect by its name to reorder</span>
       </div>
 
       <div className={`flex min-h-0 flex-1 items-start gap-3 overflow-x-auto p-3 ${chain.fxBypass ? 'opacity-50' : ''}`}>

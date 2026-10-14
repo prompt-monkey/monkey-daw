@@ -52,9 +52,10 @@ export function playheadPosition(): number {
   return engine.position() ?? useTransportStore.getState().cursor
 }
 
-/** Keeps the engine in sync with the project. Call once at startup. */
+/** Keeps the engine in sync with the project and the resting playhead. Call once at startup. */
 export function connectEngine() {
   engine.setProject(useProjectStore.getState().project)
+  useTransportStore.subscribe((s, prev) => s.cursor !== prev.cursor && engine.setRestingPosition(s.cursor))
   return useProjectStore.subscribe((s, prev) => {
     if (s.project !== prev.project) engine.setProject(s.project)
   })

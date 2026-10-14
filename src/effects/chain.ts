@@ -2,13 +2,17 @@
 // project's effect list creates, updates, removes and rewires instances as needed.
 
 import type { Effect, Id } from '../model/types'
-import { createEffectInstance, type EffectInstance } from './nodes'
+import { createEffectInstance, type Binding, type EffectInstance } from './nodes'
 
 interface Entry {
   effect: Effect
   bpm: number
+  /** Automated parameter keys at the last update, joined, to notice when lanes change. */
+  automated: string
   instance: EffectInstance
 }
+
+const NONE: ReadonlySet<string> = new Set()
 
 export class EffectChain {
   readonly input: GainNode
@@ -24,7 +28,11 @@ export class EffectChain {
     this.output = ctx.createGain()
   }
 
-  sync(effects: Effect[], bypass: boolean, bpm: number, immediate: boolean) {
+  /**
+   * `automated` lists, per effect id, the parameters automation is driving; those are left to
+   * the automation scheduler.
+   */
+  sync(effects: Effect[], bypass: boolean, bpm: number, immediate: boolean, automated?: ReadonlyMap<Id, ReadonlySet<string>>) {
     const ids = new Set(effects.map((e) => e.id))
     for (const [id, entry] of this.entries) {
       if (ids.has(id)) continue
@@ -32,15 +40,18 @@ export class EffectChain {
       this.entries.delete(id)
     }
     for (const effect of effects) {
+      const keys = automated?.get(effect.id) ?? NONE
+      const signature = [...keys].sort().join(',')
       const entry = this.entries.get(effect.id)
       if (!entry) {
         const instance = createEffectInstance(this.ctx, effect)
-        instance.update(effect.params, bpm, true)
-        this.entries.set(effect.id, { effect, bpm, instance })
-      } else if (entry.effect !== effect || (entry.bpm !== bpm && effect.type === 'delay')) {
-        entry.instance.update(effect.params, bpm, immediate)
+        instance.update(effect.params, bpm, true, keys)
+        this.entries.set(effect.id, { effect, bpm, automated: signature, instance })
+      } else if (entry.effect !== effect || entry.automated !== signature || (entry.bpm !== bpm && effect.type === 'delay')) {
+        entry.instance.update(effect.params, bpm, immediate, keys)
         entry.effect = effect
         entry.bpm = bpm
+        entry.automated = signature
       }
     }
 
@@ -56,6 +67,11 @@ export class EffectChain {
     }
     node.connect(this.output)
     this.wired = active
+  }
+
+  /** The AudioParams an effect parameter drives, for automation. */
+  bindings(effectId: Id, key: string): Binding[] {
+    return this.entries.get(effectId)?.instance.bindings(key) ?? []
   }
 
   dispose() {

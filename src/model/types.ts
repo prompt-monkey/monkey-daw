@@ -56,7 +56,32 @@ export interface Track {
   effects: Effect[]
   /** Bypasses the whole effect chain. */
   fxBypass: boolean
+  /** Automation lanes, at most one per target. */
+  automation: AutomationLane[]
   clips: Clip[]
+}
+
+/**
+ * What a lane controls: the track's volume or pan, or a numeric parameter of one of its effects.
+ * Written as a key: 'volume', 'pan' or 'fx:<effectId>:<param>'.
+ */
+export type AutomationTarget = string
+
+export interface AutomationPoint {
+  time: number
+  /**
+   * Position on the control's own scale, 0–1 (the fader curve for volume, octaves for a
+   * frequency…), so moves between points sound even.
+   */
+  value: number
+  /** Bend of the segment to the next point, -1…1 (0 is a straight line). */
+  curve: number
+}
+
+export interface AutomationLane {
+  target: AutomationTarget
+  /** Sorted by time. */
+  points: AutomationPoint[]
 }
 
 export type EffectType = 'eq' | 'compressor' | 'filter' | 'delay' | 'reverb' | 'saturation' | 'gate'

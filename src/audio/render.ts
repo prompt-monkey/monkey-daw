@@ -34,7 +34,8 @@ export async function renderProject(
   const ctx = new OfflineAudioContext(2, length, sampleRate)
   await ensureEffectWorklets(ctx)
   const mix = new MixGraph(ctx)
-  mix.sync(project, true)
+  mix.sync(project, true, range.start)
+  mix.scheduleAutomation(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
   for (const ev of clipEvents(project, { from: range.start, to: range.end, catchUp: true, cutAt: range.end })) {
     const buffer = assets.get(ev.clip.assetId)
     if (buffer) mix.playClip(ev, buffer, ev.at - range.start)

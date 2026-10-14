@@ -30,6 +30,8 @@ export class AudioEngine {
   private planner: PlaybackPlanner | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private voices = new Set<Voice>()
+  /** Where the playhead rests while stopped; automated controls hold their value there. */
+  private restingPosition = 0
   /** While recording, playback runs straight through instead of looping. */
   private ignoreLoop = false
   /** Where the current playback started: timeline time and the audio clock time it maps to. */
@@ -60,7 +62,7 @@ export class AudioEngine {
   setProject(project: Project) {
     const prev = this.project
     this.project = project
-    this.mix?.sync(project)
+    this.mix?.sync(project, false, this.planner ? null : this.restingPosition)
     if (this.planner && timelineChanged(prev, project)) this.restart()
   }
 
@@ -89,7 +91,15 @@ export class AudioEngine {
     this.planner = null
     this.origin = null
     this.stopVoices()
+    // Stop the automation ramps and hold automated controls where playback stopped.
+    this.mix?.sync(this.project, false, position ?? this.restingPosition)
     return position
+  }
+
+  /** Tells the engine where the playhead rests while stopped (seek, stop). */
+  setRestingPosition(time: number) {
+    this.restingPosition = time
+    if (!this.planner) this.mix?.sync(this.project, false, time)
   }
 
   /**
@@ -131,6 +141,7 @@ export class AudioEngine {
           if (enabled || beat.time < countInUntil!) scheduleClick(ctx, beat.time + ctxOffset, beat.accent, volume)
         }
       }
+      mix.scheduleAutomation(this.project, window, ctxOffset)
       for (const ev of clipEvents(this.project, window)) {
         const buffer = this.assets.get(ev.clip.assetId)
         if (!buffer) continue

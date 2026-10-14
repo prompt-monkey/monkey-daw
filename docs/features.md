@@ -119,6 +119,12 @@ are deferred to the end of the project (see "Deferred to the end" below).
 - Curve handles
 - Knobs move during playback
 
+Built in phase 3, on tracks. Lanes are drawn over the track's clips (track menu → Show automation,
+or right-click a rack knob). Values follow each control's own scale (fader curve, octaves for
+frequencies). Not yet: automation on buses and the master, writing automation by moving a knob
+during playback, and automating reverb decay or saturation drive (changing those rebuilds audio
+data, so they can't move smoothly).
+
 ## 11. Tempo sync
 - Samples with a BPM in their filename fit the project tempo
 - Stretch mode (keeps the pitch) vs. Resample mode (pitch follows tempo)

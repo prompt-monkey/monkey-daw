@@ -38,6 +38,8 @@ interface ViewStore {
   bottomPanel: 'mixer' | 'effects'
   /** Channel whose effect chain the rack shows. */
   rackChannel: Id | 'master'
+  /** Per track, the automation lane drawn over its clips (absent: clips view). */
+  automationView: Record<Id, string>
   setPps: (pps: number) => void
   setTrackHeight: (h: TrackHeight) => void
   setFollowPlayhead: (on: boolean) => void
@@ -53,6 +55,8 @@ interface ViewStore {
   setBottomPanel: (panel: 'mixer' | 'effects') => void
   /** Shows a channel's effects in the bottom panel. */
   openRack: (channel: Id | 'master') => void
+  /** Shows a lane over a track's clips, or the clips again with null. */
+  setAutomationView: (trackId: Id, target: string | null) => void
 }
 
 export const useViewStore = create<ViewStore>()((set) => ({
@@ -69,6 +73,7 @@ export const useViewStore = create<ViewStore>()((set) => ({
   libraryOpen: true,
   bottomPanel: 'mixer',
   rackChannel: 'master',
+  automationView: {},
   setPps: (pps) => set({ pps: clampPps(pps) }),
   setTrackHeight: (trackHeight) => set({ trackHeight }),
   setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -84,4 +89,11 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel }),
   openRack: (rackChannel) => set({ rackChannel, bottomPanel: 'effects', mixerOpen: true }),
+  setAutomationView: (trackId, target) =>
+    set((s) => {
+      const next = { ...s.automationView }
+      if (target) next[trackId] = target
+      else delete next[trackId]
+      return { automationView: next }
+    }),
 }))

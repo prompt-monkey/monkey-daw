@@ -1,16 +1,31 @@
 // Audio node implementations of the effects. Each effect is a small sub-graph with one input and
 // one output, built on any BaseAudioContext so live playback and offline export match.
+//
+// Every numeric parameter is described by bindings: which AudioParams it drives and how its
+// value maps onto them. Normal updates and automation both go through the same bindings.
 
 import type { Effect, EffectParams } from '../model/types'
 import { delaySeconds } from './definitions'
 import { dbToGain, mixGains, reverbImpulse, saturationCurve, seedFromId } from './dsp'
 import gateWorkletUrl from './gate.worklet.ts?worker&url'
 
+/** One AudioParam driven by an effect parameter. */
+export interface Binding {
+  param: AudioParam
+  /** AudioParam value for a parameter value (given all params and the tempo, for synced times). */
+  map: (value: number, params: EffectParams, bpm: number) => number
+}
+
 export interface EffectInstance {
   input: AudioNode
   output: AudioNode
-  /** Applies new parameter values; `immediate` skips smoothing (offline renders, new nodes). */
-  update: (params: EffectParams, bpm: number, immediate: boolean) => void
+  /**
+   * Applies parameter values. `immediate` skips smoothing (offline renders, new nodes). Keys in
+   * `automated` are left alone: automation drives them.
+   */
+  update: (params: EffectParams, bpm: number, immediate: boolean, automated?: ReadonlySet<string>) => void
+  /** The AudioParams a parameter drives (empty if it can't be automated). */
+  bindings: (key: string) => Binding[]
   dispose: () => void
 }
 
@@ -33,16 +48,22 @@ export function ensureEffectWorklets(ctx: BaseAudioContext): Promise<void> {
   return promise
 }
 
-function setParam(ctx: BaseAudioContext, param: AudioParam, value: number, immediate: boolean) {
+export function setParam(ctx: BaseAudioContext, param: AudioParam, value: number, immediate: boolean) {
   if (immediate) {
     param.cancelScheduledValues(0)
     param.value = value
   } else {
+    // Drop ramps still scheduled (e.g. from automation that was just removed), then glide.
+    param.cancelScheduledValues(ctx.currentTime)
     param.setTargetAtTime(value, ctx.currentTime, SMOOTHING)
   }
 }
 
-const n = (params: EffectParams, key: string) => params[key] as number
+const disconnectAll = (nodes: AudioNode[]) => nodes.forEach((node) => node.disconnect())
+
+/** Keeps frequencies just below Nyquist, where filters stop being valid. */
+const nyquistSafe = (ctx: BaseAudioContext) => (hz: number) => Math.min(hz, ctx.sampleRate / 2 - 100)
+const identity = (v: number) => v
 
 /** Input split into a dry path and a wet path, summed at the output with an equal-power mix. */
 function dryWet(ctx: BaseAudioContext) {
@@ -57,16 +78,41 @@ function dryWet(ctx: BaseAudioContext) {
     output,
     /** Connect the end of the wet chain here. */
     wet,
-    setMix(percent: number, immediate: boolean) {
-      const g = mixGains(percent / 100)
-      setParam(ctx, dry.gain, g.dry, immediate)
-      setParam(ctx, wet.gain, g.wet, immediate)
-    },
+    mixBindings: [
+      { param: dry.gain, map: (percent: number) => mixGains(percent / 100).dry },
+      { param: wet.gain, map: (percent: number) => mixGains(percent / 100).wet },
+    ] as Binding[],
     nodes: [input, dry, wet, output] as AudioNode[],
   }
 }
 
-const disconnectAll = (nodes: AudioNode[]) => nodes.forEach((node) => node.disconnect())
+interface Parts {
+  input: AudioNode
+  output: AudioNode
+  bindings: () => Record<string, Binding[]>
+  /** Non-numeric or structural changes (filter type, ping-pong, impulse, curve). */
+  configure?: (params: EffectParams, bpm: number) => boolean | void
+  nodes: () => AudioNode[]
+}
+
+/** Turns an effect's parts into an EffectInstance with the shared update logic. */
+function instance(ctx: BaseAudioContext, parts: Parts): EffectInstance {
+  return {
+    input: parts.input,
+    output: parts.output,
+    update(params, bpm, immediate, automated) {
+      // A structural rebuild creates fresh nodes, which take their values immediately.
+      const rebuilt = parts.configure?.(params, bpm) === true
+      for (const [key, bindings] of Object.entries(parts.bindings())) {
+        if (automated?.has(key)) continue
+        const value = params[key] as number
+        for (const b of bindings) setParam(ctx, b.param, b.map(value, params, bpm), immediate || rebuilt)
+      }
+    },
+    bindings: (key) => parts.bindings()[key] ?? [],
+    dispose: () => disconnectAll(parts.nodes()),
+  }
+}
 
 function eq(ctx: BaseAudioContext): EffectInstance {
   const make = (type: BiquadFilterType) => {
@@ -81,23 +127,25 @@ function eq(ctx: BaseAudioContext): EffectInstance {
   const highCut = make('lowpass')
   lowCut.Q.value = highCut.Q.value = Math.SQRT1_2
   lowCut.connect(low).connect(mid).connect(high).connect(highCut)
-  return {
+  const hz = nyquistSafe(ctx)
+  const bindings = {
+    lowCut: [{ param: lowCut.frequency, map: hz }],
+    lowFreq: [{ param: low.frequency, map: identity }],
+    lowGain: [{ param: low.gain, map: identity }],
+    midFreq: [{ param: mid.frequency, map: identity }],
+    midGain: [{ param: mid.gain, map: identity }],
+    midQ: [{ param: mid.Q, map: identity }],
+    highFreq: [{ param: high.frequency, map: hz }],
+    highGain: [{ param: high.gain, map: identity }],
+    // At the top of its range the high cut opens fully (to just below Nyquist).
+    highCut: [{ param: highCut.frequency, map: hz }],
+  }
+  return instance(ctx, {
     input: lowCut,
     output: highCut,
-    update(p, _bpm, now) {
-      setParam(ctx, lowCut.frequency, n(p, 'lowCut'), now)
-      setParam(ctx, low.frequency, n(p, 'lowFreq'), now)
-      setParam(ctx, low.gain, n(p, 'lowGain'), now)
-      setParam(ctx, mid.frequency, n(p, 'midFreq'), now)
-      setParam(ctx, mid.gain, n(p, 'midGain'), now)
-      setParam(ctx, mid.Q, n(p, 'midQ'), now)
-      setParam(ctx, high.frequency, n(p, 'highFreq'), now)
-      setParam(ctx, high.gain, n(p, 'highGain'), now)
-      // At the top of its range the high cut opens fully (to just below Nyquist).
-      setParam(ctx, highCut.frequency, Math.min(n(p, 'highCut'), ctx.sampleRate / 2 - 100), now)
-    },
-    dispose: () => disconnectAll([lowCut, low, mid, high, highCut]),
-  }
+    bindings: () => bindings,
+    nodes: () => [lowCut, low, mid, high, highCut],
+  })
 }
 
 function compressor(ctx: BaseAudioContext): EffectInstance {
@@ -105,37 +153,41 @@ function compressor(ctx: BaseAudioContext): EffectInstance {
   const comp = ctx.createDynamicsCompressor()
   const makeup = ctx.createGain()
   dw.input.connect(comp).connect(makeup).connect(dw.wet)
-  return {
+  const bindings = {
+    threshold: [{ param: comp.threshold, map: identity }],
+    ratio: [{ param: comp.ratio, map: identity }],
+    knee: [{ param: comp.knee, map: identity }],
+    attack: [{ param: comp.attack, map: (ms: number) => ms / 1000 }],
+    release: [{ param: comp.release, map: (ms: number) => ms / 1000 }],
+    makeup: [{ param: makeup.gain, map: dbToGain }],
+    mix: dw.mixBindings,
+  }
+  return instance(ctx, {
     input: dw.input,
     output: dw.output,
-    update(p, _bpm, now) {
-      setParam(ctx, comp.threshold, n(p, 'threshold'), now)
-      setParam(ctx, comp.ratio, n(p, 'ratio'), now)
-      setParam(ctx, comp.knee, n(p, 'knee'), now)
-      setParam(ctx, comp.attack, n(p, 'attack') / 1000, now)
-      setParam(ctx, comp.release, n(p, 'release') / 1000, now)
-      setParam(ctx, makeup.gain, dbToGain(n(p, 'makeup')), now)
-      dw.setMix(n(p, 'mix'), now)
-    },
-    dispose: () => disconnectAll([...dw.nodes, comp, makeup]),
-  }
+    bindings: () => bindings,
+    nodes: () => [...dw.nodes, comp, makeup],
+  })
 }
 
 function filter(ctx: BaseAudioContext): EffectInstance {
   const dw = dryWet(ctx)
   const biquad = ctx.createBiquadFilter()
   dw.input.connect(biquad).connect(dw.wet)
-  return {
+  const bindings = {
+    cutoff: [{ param: biquad.frequency, map: nyquistSafe(ctx) }],
+    resonance: [{ param: biquad.Q, map: identity }],
+    mix: dw.mixBindings,
+  }
+  return instance(ctx, {
     input: dw.input,
     output: dw.output,
-    update(p, _bpm, now) {
+    bindings: () => bindings,
+    configure: (p) => {
       biquad.type = p.mode as BiquadFilterType
-      setParam(ctx, biquad.frequency, Math.min(n(p, 'cutoff'), ctx.sampleRate / 2 - 100), now)
-      setParam(ctx, biquad.Q, n(p, 'resonance'), now)
-      dw.setMix(n(p, 'mix'), now)
     },
-    dispose: () => disconnectAll([...dw.nodes, biquad]),
-  }
+    nodes: () => [...dw.nodes, biquad],
+  })
 }
 
 function delay(ctx: BaseAudioContext): EffectInstance {
@@ -143,7 +195,15 @@ function delay(ctx: BaseAudioContext): EffectInstance {
   // The echo network hangs off this node, so it can be rebuilt without touching the dry path.
   const send = ctx.createGain()
   dw.input.connect(send)
-  let network: { nodes: AudioNode[]; update: (p: EffectParams, bpm: number, now: boolean) => void } | null = null
+  // Web Audio delays any feedback loop by one render block (128 frames). The looping delay is
+  // shortened by that much so repeats land on time; a fixed block of pre-delay keeps the first
+  // echo on time too.
+  const block = RENDER_QUANTUM / ctx.sampleRate
+  // `ms` is the free time being applied (it may be automated); a synced division overrides it.
+  const fullTime = (ms: number, p: EffectParams, bpm: number) => Math.min(MAX_DELAY, delaySeconds({ ...p, time: ms }, bpm))
+  const loopTime = (v: number, p: EffectParams, bpm: number) => Math.max(block, fullTime(v, p, bpm) - block)
+  const hz = nyquistSafe(ctx)
+  let network: { nodes: AudioNode[]; bindings: Record<string, Binding[]> } | null = null
   let pingPong: boolean | null = null
 
   const delayLine = () => {
@@ -152,12 +212,6 @@ function delay(ctx: BaseAudioContext): EffectInstance {
     tone.type = 'lowpass'
     return { d, tone }
   }
-
-  // Web Audio delays any feedback loop by one render block (128 frames). The looping delay is
-  // shortened by that much so repeats land on time; a fixed block of pre-delay keeps the first
-  // echo on time too.
-  const block = RENDER_QUANTUM / ctx.sampleRate
-  const loopTime = (p: EffectParams, bpm: number) => Math.max(block, Math.min(MAX_DELAY, delaySeconds(p, bpm)) - block)
 
   const build = (ping: boolean) => {
     if (network) disconnectAll(network.nodes)
@@ -171,10 +225,10 @@ function delay(ctx: BaseAudioContext): EffectInstance {
       a.tone.connect(feedback).connect(a.d)
       network = {
         nodes: [pre, a.d, a.tone, feedback],
-        update(p, bpm, now) {
-          setParam(ctx, a.d.delayTime, loopTime(p, bpm), now)
-          setParam(ctx, a.tone.frequency, Math.min(n(p, 'tone'), ctx.sampleRate / 2 - 100), now)
-          setParam(ctx, feedback.gain, n(p, 'feedback') / 100, now)
+        bindings: {
+          time: [{ param: a.d.delayTime, map: loopTime }],
+          tone: [{ param: a.tone.frequency, map: hz }],
+          feedback: [{ param: feedback.gain, map: (v: number) => v / 100 }],
         },
       }
     } else {
@@ -193,41 +247,41 @@ function delay(ctx: BaseAudioContext): EffectInstance {
       r.d.connect(r.tone)
       l.tone.connect(merger, 0, 0)
       r.tone.connect(merger, 0, 1)
+      // The first left→right hop is the second echo, so it always passes; feedback sets the rest.
       l.tone.connect(crossLR).connect(r.d)
       r.tone.connect(crossRL).connect(l.d)
       merger.connect(dw.wet)
       network = {
         nodes: [sum, l.d, l.tone, r.d, r.tone, crossLR, crossRL, merger],
-        update(p, bpm, now) {
+        bindings: {
           // The loop's extra block falls on the left→right hop, so only the right line is shortened.
-          setParam(ctx, l.d.delayTime, Math.min(MAX_DELAY, delaySeconds(p, bpm)), now)
-          setParam(ctx, r.d.delayTime, loopTime(p, bpm), now)
-          for (const line of [l, r]) {
-            setParam(ctx, line.tone.frequency, Math.min(n(p, 'tone'), ctx.sampleRate / 2 - 100), now)
-          }
-          // The first left→right hop is the second echo, so it always passes; feedback sets the rest.
-          setParam(ctx, crossLR.gain, 1, now)
-          setParam(ctx, crossRL.gain, n(p, 'feedback') / 100, now)
+          time: [
+            { param: l.d.delayTime, map: fullTime },
+            { param: r.d.delayTime, map: loopTime },
+          ],
+          tone: [
+            { param: l.tone.frequency, map: hz },
+            { param: r.tone.frequency, map: hz },
+          ],
+          feedback: [{ param: crossRL.gain, map: (v: number) => v / 100 }],
         },
       }
     }
     pingPong = ping
   }
 
-  return {
+  return instance(ctx, {
     input: dw.input,
     output: dw.output,
-    update(p, bpm, now) {
+    bindings: () => ({ ...network!.bindings, mix: dw.mixBindings }),
+    configure: (p) => {
       const ping = p.pingPong === true
-      if (ping !== pingPong) {
-        build(ping)
-        now = true
-      }
-      network!.update(p, bpm, now)
-      dw.setMix(n(p, 'mix'), now)
+      if (ping === pingPong) return false
+      build(ping)
+      return true
     },
-    dispose: () => disconnectAll([...dw.nodes, send, ...(network?.nodes ?? [])]),
-  }
+    nodes: () => [...dw.nodes, send, ...(network?.nodes ?? [])],
+  })
 }
 
 function reverb(ctx: BaseAudioContext, effect: Effect): EffectInstance {
@@ -239,23 +293,25 @@ function reverb(ctx: BaseAudioContext, effect: Effect): EffectInstance {
   dw.input.connect(preDelay).connect(convolver).connect(damping).connect(dw.wet)
   const seed = seedFromId(effect.id)
   let decay: number | null = null
-  return {
+  const bindings = {
+    preDelay: [{ param: preDelay.delayTime, map: (ms: number) => ms / 1000 }],
+    damping: [{ param: damping.frequency, map: nyquistSafe(ctx) }],
+    mix: dw.mixBindings,
+  }
+  return instance(ctx, {
     input: dw.input,
     output: dw.output,
-    update(p, _bpm, now) {
-      if (n(p, 'decay') !== decay) {
-        decay = n(p, 'decay')
-        const channels = reverbImpulse(ctx.sampleRate, decay, seed)
-        const buffer = ctx.createBuffer(2, channels[0].length, ctx.sampleRate)
-        channels.forEach((data, i) => buffer.copyToChannel(data as Float32Array<ArrayBuffer>, i))
-        convolver.buffer = buffer
-      }
-      setParam(ctx, preDelay.delayTime, n(p, 'preDelay') / 1000, now)
-      setParam(ctx, damping.frequency, Math.min(n(p, 'damping'), ctx.sampleRate / 2 - 100), now)
-      dw.setMix(n(p, 'mix'), now)
+    bindings: () => bindings,
+    configure: (p) => {
+      if (p.decay === decay) return
+      decay = p.decay as number
+      const channels = reverbImpulse(ctx.sampleRate, decay, seed)
+      const buffer = ctx.createBuffer(2, channels[0].length, ctx.sampleRate)
+      channels.forEach((data, i) => buffer.copyToChannel(data as Float32Array<ArrayBuffer>, i))
+      convolver.buffer = buffer
     },
-    dispose: () => disconnectAll([...dw.nodes, preDelay, convolver, damping]),
-  }
+    nodes: () => [...dw.nodes, preDelay, convolver, damping],
+  })
 }
 
 function saturation(ctx: BaseAudioContext): EffectInstance {
@@ -267,20 +323,22 @@ function saturation(ctx: BaseAudioContext): EffectInstance {
   const output = ctx.createGain()
   dw.input.connect(shaper).connect(tone).connect(output).connect(dw.wet)
   let drive: number | null = null
-  return {
+  const bindings = {
+    tone: [{ param: tone.frequency, map: nyquistSafe(ctx) }],
+    output: [{ param: output.gain, map: dbToGain }],
+    mix: dw.mixBindings,
+  }
+  return instance(ctx, {
     input: dw.input,
     output: dw.output,
-    update(p, _bpm, now) {
-      if (n(p, 'drive') !== drive) {
-        drive = n(p, 'drive')
-        shaper.curve = saturationCurve(drive) as Float32Array<ArrayBuffer>
-      }
-      setParam(ctx, tone.frequency, Math.min(n(p, 'tone'), ctx.sampleRate / 2 - 100), now)
-      setParam(ctx, output.gain, dbToGain(n(p, 'output')), now)
-      dw.setMix(n(p, 'mix'), now)
+    bindings: () => bindings,
+    configure: (p) => {
+      if (p.drive === drive) return
+      drive = p.drive as number
+      shaper.curve = saturationCurve(drive) as Float32Array<ArrayBuffer>
     },
-    dispose: () => disconnectAll([...dw.nodes, shaper, tone, output]),
-  }
+    nodes: () => [...dw.nodes, shaper, tone, output],
+  })
 }
 
 function gate(ctx: BaseAudioContext): EffectInstance {
@@ -291,18 +349,19 @@ function gate(ctx: BaseAudioContext): EffectInstance {
     // Worklet not loaded: pass the signal through unchanged rather than breaking the chain.
     node = ctx.createGain()
   }
-  return {
+  const bindings: Record<string, Binding[]> = {}
+  if (node instanceof AudioWorkletNode) {
+    for (const key of ['threshold', 'attack', 'release', 'range']) {
+      const param = node.parameters.get(key)
+      if (param) bindings[key] = [{ param, map: identity }]
+    }
+  }
+  return instance(ctx, {
     input: node,
     output: node,
-    update(p, _bpm, now) {
-      if (!(node instanceof AudioWorkletNode)) return
-      for (const key of ['threshold', 'attack', 'release', 'range']) {
-        const param = node.parameters.get(key)
-        if (param) setParam(ctx, param, n(p, key), now)
-      }
-    },
-    dispose: () => node.disconnect(),
-  }
+    bindings: () => bindings,
+    nodes: () => [node],
+  })
 }
 
 const BUILDERS: Record<Effect['type'], (ctx: BaseAudioContext, effect: Effect) => EffectInstance> = {

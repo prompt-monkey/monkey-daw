@@ -3,7 +3,8 @@
 
 import { normalizeEffect } from '../effects/definitions'
 import { createProject } from './factory'
-import type { Bus, Clip, Effect, Project, Track } from './types'
+import { resolveTarget } from '../automation/targets'
+import type { AutomationLane, Bus, Clip, Effect, Project, Track } from './types'
 
 export class InvalidProjectError extends Error {}
 
@@ -56,7 +57,7 @@ function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
         .map((s) => ({ busId: s.busId, level: num(s.level, 0) }))
     : []
   const clips = Array.isArray(raw.clips) ? raw.clips.map((c) => normalizeClip(c as Loose<Clip>)).filter((c) => c !== null) : []
-  return {
+  const track: Track = {
     id: raw.id,
     name: str(raw.name, 'Track'),
     kind,
@@ -68,8 +69,32 @@ function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
     sends,
     effects: effects(raw.effects),
     fxBypass: bool(raw.fxBypass),
+    automation: [],
     clips,
   }
+  track.automation = lanes(raw.automation, track)
+  return track
+}
+
+/** Valid lanes only: targets that still exist on the track, one lane per target, clean points. */
+function lanes(v: unknown, track: Track): AutomationLane[] {
+  if (!Array.isArray(v)) return []
+  const seen = new Set<string>()
+  const out: AutomationLane[] = []
+  for (const raw of v as Loose<AutomationLane>[]) {
+    if (typeof raw?.target !== 'string' || seen.has(raw.target) || !resolveTarget(track, raw.target)) continue
+    seen.add(raw.target)
+    const points = (Array.isArray(raw.points) ? raw.points : [])
+      .filter((p) => typeof p?.time === 'number' && Number.isFinite(p.time) && typeof p.value === 'number' && Number.isFinite(p.value))
+      .map((p) => ({
+        time: Math.max(0, p.time),
+        value: Math.min(1, Math.max(0, p.value)),
+        curve: Math.min(1, Math.max(-1, num(p.curve, 0))),
+      }))
+      .sort((a, b) => a.time - b.time)
+    out.push({ target: raw.target, points })
+  }
+  return out
 }
 
 export function normalizeProject(input: unknown): Project {

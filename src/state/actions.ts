@@ -5,7 +5,25 @@ import { current } from 'immer'
 import { createBus, createClip, createId, createTrack } from '../model/factory'
 import { MAX_GAIN } from '../model/levels'
 import { EFFECTS, createEffect, findParam, normalizeParam } from '../effects/definitions'
-import type { AssetMeta, Bus, Clip, Effect, EffectParams, EffectType, Id, OutputTarget, Project, SnapMode, TimeSignature, Track } from '../model/types'
+import { insertPoint } from '../automation/curve'
+import { resolveTarget } from '../automation/targets'
+import type {
+  AssetMeta,
+  AutomationLane,
+  AutomationPoint,
+  AutomationTarget,
+  Bus,
+  Clip,
+  Effect,
+  EffectParams,
+  EffectType,
+  Id,
+  OutputTarget,
+  Project,
+  SnapMode,
+  TimeSignature,
+  Track,
+} from '../model/types'
 import { useProjectStore } from './projectStore'
 import type { ClipboardItem } from './viewStore'
 
@@ -302,6 +320,8 @@ export function removeEffect(ref: ChannelRef, effectId: Id) {
   update('Remove effect', (p) => {
     const holder = chainHolder(p, ref)
     if (holder) holder.effects = holder.effects.filter((e) => e.id !== effectId)
+    const track = ref === 'master' ? undefined : findTrack(p, ref)
+    if (track) pruneLanes(track)
   })
 }
 
@@ -355,5 +375,91 @@ export function applyChain(ref: ChannelRef, chain: ChainTemplate[], label: strin
   update(label, (p) => {
     const holder = chainHolder(p, ref)
     if (holder) holder.effects = effects
+    const track = ref === 'master' ? undefined : findTrack(p, ref)
+    if (track) pruneLanes(track)
+  })
+}
+
+// --- Automation ----------------------------------------------------------------------------
+
+function laneOf(p: Project, trackId: Id, target: AutomationTarget): AutomationLane | undefined {
+  return findTrack(p, trackId)?.automation.find((l) => l.target === target)
+}
+
+/** Drops lanes whose target no longer exists (e.g. after removing an effect). */
+function pruneLanes(track: Track) {
+  track.automation = track.automation.filter((l) => resolveTarget(track, l.target) !== null)
+}
+
+/** Creates an empty lane for a target if the track doesn't have one yet. */
+export function addAutomationLane(trackId: Id, target: AutomationTarget) {
+  update('Add automation', (p) => {
+    const t = findTrack(p, trackId)
+    if (!t || t.automation.some((l) => l.target === target) || !resolveTarget(t, target)) return
+    t.automation.push({ target, points: [] })
+  })
+}
+
+export function removeAutomationLane(trackId: Id, target: AutomationTarget) {
+  update('Remove automation', (p) => {
+    const t = findTrack(p, trackId)
+    if (t) t.automation = t.automation.filter((l) => l.target !== target)
+  })
+}
+
+/** Adds a point (creating the lane if needed). Returns the point's index in the lane. */
+export function addAutomationPoint(trackId: Id, target: AutomationTarget, point: AutomationPoint): number {
+  let index = -1
+  update('Add automation point', (p) => {
+    const t = findTrack(p, trackId)
+    if (!t || !resolveTarget(t, target)) return
+    let lane = t.automation.find((l) => l.target === target)
+    if (!lane) {
+      lane = { target, points: [] }
+      t.automation.push(lane)
+    }
+    const clean = { time: Math.max(0, point.time), value: Math.min(1, Math.max(0, point.value)), curve: point.curve }
+    lane.points = insertPoint(lane.points, clean)
+    index = lane.points.findIndex((x) => x.time === clean.time)
+  })
+  return index
+}
+
+/**
+ * Moves a point during a drag (one undo step per drag; call endGesture at the end). It can't
+ * pass its neighbours, so its index stays the same.
+ */
+export function moveAutomationPoint(trackId: Id, target: AutomationTarget, index: number, time: number, value: number) {
+  update(
+    'Move automation point',
+    (p) => {
+      const lane = laneOf(p, trackId, target)
+      const point = lane?.points[index]
+      if (!lane || !point) return
+      const min = index > 0 ? lane.points[index - 1].time + 0.001 : 0
+      const max = index < lane.points.length - 1 ? lane.points[index + 1].time - 0.001 : Infinity
+      point.time = Math.min(max, Math.max(min, time))
+      point.value = Math.min(1, Math.max(0, value))
+    },
+    `auto-point:${trackId}:${target}:${index}`,
+  )
+}
+
+/** Sets the bend of the segment that starts at `index`. */
+export function setAutomationCurve(trackId: Id, target: AutomationTarget, index: number, curve: number) {
+  update(
+    'Bend automation',
+    (p) => {
+      const point = laneOf(p, trackId, target)?.points[index]
+      if (point) point.curve = Math.min(1, Math.max(-1, curve))
+    },
+    `auto-curve:${trackId}:${target}:${index}`,
+  )
+}
+
+export function deleteAutomationPoint(trackId: Id, target: AutomationTarget, index: number) {
+  update('Delete automation point', (p) => {
+    const lane = laneOf(p, trackId, target)
+    if (lane) lane.points.splice(index, 1)
   })
 }

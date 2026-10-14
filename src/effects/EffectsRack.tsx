@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 import type { Effect, Id } from '../model/types'
 import {
+  addAutomationLane,
   addEffect,
   applyChain,
   moveEffect,
@@ -15,13 +16,68 @@ import { useViewStore } from '../state/viewStore'
 import { Knob } from '../ui/Knob'
 import { Menu } from '../ui/Menu'
 import { toast } from '../ui/toast'
-import { EFFECTS, EFFECT_TYPES, delaySeconds, type ChoiceParam, type NumberParam } from './definitions'
+import { effectTarget } from '../automation/targets'
+import { useAutomatedValue } from '../automation/useAutomatedValue'
+import { EFFECTS, EFFECT_TYPES, delaySeconds, fromNormalized, type ChoiceParam, type NumberParam } from './definitions'
 import { BUILT_IN_PRESETS, deleteUserPreset, saveUserPreset, useUserPresets } from './presets'
 
 /** Drag-and-drop data type carrying the id of an effect being reordered. */
 const EFFECT_DRAG_TYPE = 'application/x-monkey-daw-effect'
 
 const small = 'rounded border border-line px-2 py-0.5 text-[11px] hover:bg-surface-2 disabled:opacity-40'
+
+/**
+ * A parameter knob that knows about automation: right-click automates it on the track's
+ * timeline; when automated it follows the lane during playback and shows an "A" badge.
+ */
+function ParamKnob({
+  channel,
+  effect,
+  def,
+  onChange,
+  onCommit,
+  disabled,
+  display,
+}: {
+  channel: ChannelRef
+  effect: Effect
+  def: NumberParam
+  onChange: (value: number) => void
+  onCommit: () => void
+  disabled: boolean
+  display?: string
+}) {
+  const track = useProjectStore((s) => (channel === 'master' ? undefined : s.project.tracks.find((t) => t.id === channel)))
+  const target = effectTarget(effect.id, def.key)
+  const automated = useAutomatedValue(track, target)
+  const canAutomate = Boolean(track) && def.automatable !== false
+
+  return (
+    <Knob
+      def={def}
+      value={automated === null ? (effect.params[def.key] as number) : fromNormalized(def, automated)}
+      onChange={onChange}
+      onCommit={onCommit}
+      disabled={disabled}
+      display={display}
+      automated={automated !== null}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if (!track) {
+          toast('Automation is available on tracks (not buses or the master yet).')
+          return
+        }
+        if (!canAutomate) {
+          toast(`${def.label} can't be automated: changing it rebuilds the sound.`)
+          return
+        }
+        addAutomationLane(track.id, target)
+        useViewStore.getState().setAutomationView(track.id, target)
+        toast(`Automating ${def.label} on "${track.name}": click its lane on the timeline to add points.`)
+      }}
+    />
+  )
+}
 
 const EffectCard = memo(function EffectCard({
   channel,
@@ -125,10 +181,11 @@ const EffectCard = memo(function EffectCard({
           if (p.kind === 'number') {
             const timeSynced = synced && p.key === 'time'
             return (
-              <Knob
+              <ParamKnob
                 key={p.key}
+                channel={channel}
+                effect={effect}
                 def={p as NumberParam}
-                value={effect.params[p.key] as number}
                 onChange={(v) => set(p.key, v)}
                 onCommit={endGesture}
                 disabled={timeSynced}

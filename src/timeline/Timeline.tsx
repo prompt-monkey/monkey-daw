@@ -11,6 +11,7 @@ import { useViewStore } from '../state/viewStore'
 import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
 import { toast } from '../ui/toast'
 import { ClipView, type ClipHandle } from './ClipView'
+import { LaneView } from '../automation/LaneView'
 import { LiveTake } from './LiveTake'
 import { trackColor } from './colors'
 import { applyPreview } from './edits'
@@ -115,9 +116,11 @@ interface LaneProps {
   pps: number
   selection: string[]
   gestureContext: () => GestureContext | null
+  /** Automation lane drawn over the clips, if the track is in automation view. */
+  laneTarget?: string
 }
 
-function Lane({ track, index, width, height, grid, pps, selection, gestureContext }: LaneProps) {
+function Lane({ track, index, width, height, grid, pps, selection, gestureContext, laneTarget }: LaneProps) {
   const color = trackColor(index)
   const onClipDown = useCallback(
     (e: React.PointerEvent, clip: Clip, handle: ClipHandle) => {
@@ -153,6 +156,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
         />
       ))}
       <LiveTake trackId={track.id} pps={pps} height={height} />
+      {laneTarget && <LaneView track={track} target={laneTarget} pps={pps} width={width} height={height} color={color} />}
     </div>
   )
 }
@@ -171,7 +175,7 @@ export function Timeline() {
   const [viewportWidth, setViewportWidth] = useState(0)
 
   const project = useProjectStore((s) => s.project)
-  const { pps, trackHeight, selection, preview, marquee, trackDrop } = useViewStore()
+  const { pps, trackHeight, selection, preview, marquee, trackDrop, automationView } = useViewStore()
   const rowHeight = TRACK_HEIGHTS[trackHeight]
   const tracks = useMemo(() => applyPreview(project.tracks, preview), [project.tracks, preview])
   const grid = useMemo(() => laneGridBackground(pps, project.bpm, project.timeSignature), [pps, project.bpm, project.timeSignature])
@@ -307,6 +311,7 @@ export function Timeline() {
                 pps={pps}
                 selection={selection}
                 gestureContext={gestureContext}
+                laneTarget={automationView[track.id]}
               />
             </div>
           ))}

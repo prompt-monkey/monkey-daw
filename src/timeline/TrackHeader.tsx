@@ -5,6 +5,7 @@ import { LevelMeter } from '../mixer/LevelMeter'
 import {
   addTrack,
   duplicateTrack,
+  removeAutomationLane,
   removeTrack,
   renameTrack,
   setPan,
@@ -17,7 +18,11 @@ import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
 import { Menu } from '../ui/Menu'
+import { useAutomatedValue } from '../automation/useAutomatedValue'
+import { availableTargets } from '../automation/targets'
 import { HEADER_WIDTH } from './geometry'
+
+const formatPan = (pan: number) => (Math.abs(pan) < 0.005 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`)
 
 interface Props {
   track: Track
@@ -31,6 +36,11 @@ interface Props {
 export const TrackHeader = memo(function TrackHeader({ track, index, color, compact, height, onGripDown }: Props) {
   const endGesture = useProjectStore((s) => s.endGesture)
   const armed = useRecordingStore((s) => s.armedTrackId === track.id)
+  const laneTarget = useViewStore((s) => s.automationView[track.id])
+  const setAutomationView = useViewStore((s) => s.setAutomationView)
+  // While automated, the sliders follow the automation and can't be dragged.
+  const autoVolume = useAutomatedValue(track, 'volume')
+  const autoPan = useAutomatedValue(track, 'pan')
   const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
 
   const slider = (
@@ -41,23 +51,63 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
     onChange: (v: number) => void,
     text: string,
     reset: number,
+    automated: boolean,
   ) => (
     <label className="grid grid-cols-[2rem_1fr_2.75rem] items-center gap-2 text-[10px] text-text-dim">
-      {label}
+      <span>
+        {label}
+        {automated && <span className="ml-0.5 font-bold text-accent" title="Automated">A</span>}
+      </span>
       <input
         type="range"
         min={min}
         max={max}
         step={0.001}
         value={value}
+        disabled={automated}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={endGesture}
         onKeyUp={endGesture}
         onDoubleClick={() => onChange(reset)}
         aria-label={`${track.name} ${label.toLowerCase()}`}
+        title={automated ? 'Automated: edit the lane on the timeline' : undefined}
       />
       <span className="text-right font-mono">{text}</span>
     </label>
+  )
+
+  const showAutomation = () => {
+    const withPoints = track.automation.find((l) => l.points.length > 0)
+    setAutomationView(track.id, withPoints?.target ?? 'volume')
+  }
+
+  const laneRow = laneTarget && (
+    <div className="flex items-center gap-1 text-[10px] text-text-dim">
+      <select
+        value={laneTarget}
+        onChange={(e) => setAutomationView(track.id, e.target.value)}
+        aria-label={`${track.name} automation lane`}
+        className="min-w-0 flex-1 rounded border border-accent/60 bg-bg px-1 py-0.5 text-[11px] text-text"
+      >
+        {availableTargets(track).map((t) => (
+          <option key={t.target} value={t.target}>
+            {track.automation.some((l) => l.target === t.target && l.points.length) ? '● ' : ''}
+            {t.label}
+          </option>
+        ))}
+      </select>
+      <button
+        className={small}
+        onClick={() => removeAutomationLane(track.id, laneTarget)}
+        disabled={!track.automation.some((l) => l.target === laneTarget && l.points.length)}
+        title="Delete this lane's points"
+      >
+        Clear
+      </button>
+      <button className={small} onClick={() => setAutomationView(track.id, null)} title="Back to the clips" aria-label="Hide automation">
+        ✕
+      </button>
+    </div>
   )
 
   return (
@@ -113,6 +163,11 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
               { label: 'Insert track above', onSelect: () => addTrack(index) },
               { label: 'Insert track below', onSelect: () => addTrack(index + 1) },
               { label: 'Effects…', onSelect: () => useViewStore.getState().openRack(track.id) },
+              laneTarget
+                ? { label: 'Hide automation', onSelect: () => setAutomationView(track.id, null) }
+                : { label: 'Show automation', onSelect: showAutomation },
+              { label: 'Automate volume', onSelect: () => setAutomationView(track.id, 'volume') },
+              { label: 'Automate pan', onSelect: () => setAutomationView(track.id, 'pan') },
               { label: 'Duplicate track', onSelect: () => duplicateTrack(track.id) },
               { label: 'Delete track', onSelect: () => removeTrack(track.id), danger: true },
             ]}
@@ -120,25 +175,30 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             ⋮
           </Menu>
         </div>
-        {slider(
-          'VOL',
-          gainToFader(track.volume),
-          0,
-          1,
-          (v) => setVolume(track.id, faderToGain(v)),
-          formatDb(track.volume),
-          gainToFader(1),
-        )}
+        {(!compact || !laneTarget) &&
+          slider(
+            'VOL',
+            autoVolume ?? gainToFader(track.volume),
+            0,
+            1,
+            (v) => setVolume(track.id, faderToGain(v)),
+            formatDb(autoVolume === null ? track.volume : faderToGain(autoVolume)),
+            gainToFader(1),
+            autoVolume !== null,
+          )}
         {!compact &&
+          !laneTarget &&
           slider(
             'PAN',
-            track.pan,
+            autoPan === null ? track.pan : autoPan * 2 - 1,
             -1,
             1,
             (v) => setPan(track.id, v),
-            track.pan === 0 ? 'C' : `${track.pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(track.pan) * 100)}`,
+            formatPan(autoPan === null ? track.pan : autoPan * 2 - 1),
             0,
+            autoPan !== null,
           )}
+        {laneRow}
       </div>
       {/* While armed, the meter shows the input level so you can set it before recording. */}
       <LevelMeter

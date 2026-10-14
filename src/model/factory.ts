@@ -17,6 +17,7 @@ export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
     sends: [],
     effects: [],
     fxBypass: false,
+    automation: [],
     clips: [],
   }
 }

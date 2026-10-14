@@ -10,6 +10,9 @@ interface Props {
   disabled?: boolean
   /** Text shown instead of the value (e.g. a synced delay time). */
   display?: string
+  /** Driven by automation: shows an "A" badge and can't be moved by hand. */
+  automated?: boolean
+  onContextMenu?: (e: React.MouseEvent) => void
 }
 
 /** Pixels of vertical drag for the full range; hold Shift for fine control. */
@@ -32,7 +35,8 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number) {
  * Rotary knob: drag up/down or use the wheel; Shift for fine steps; double-click resets;
  * arrow keys, Page Up/Down, Home and End work when focused.
  */
-export function Knob({ def, value, onChange, onCommit, disabled, display }: Props) {
+export function Knob({ def, value, onChange, onCommit, disabled: off, display, automated, onContextMenu }: Props) {
+  const disabled = off || automated
   const renderedPosition = Math.min(1, Math.max(0, toNormalized(def, value)))
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Latest position, so key presses and wheel ticks arriving before a re-render still add up.
@@ -97,7 +101,7 @@ export function Knob({ def, value, onChange, onCommit, disabled, display }: Prop
   const size = 40
   const c = size / 2
   return (
-    <div className={`flex w-16 flex-col items-center gap-0.5 ${disabled ? 'opacity-40' : ''}`}>
+    <div className={`flex w-16 flex-col items-center gap-0.5 ${off ? 'opacity-40' : ''}`} onContextMenu={onContextMenu}>
       <div
         role="slider"
         tabIndex={disabled ? -1 : 0}
@@ -107,7 +111,7 @@ export function Knob({ def, value, onChange, onCommit, disabled, display }: Prop
         aria-valuenow={Number(value.toFixed(3))}
         aria-valuetext={display ?? formatValue(def, value)}
         aria-disabled={disabled}
-        className="cursor-ns-resize touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className={`touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent ${disabled ? 'cursor-default' : 'cursor-ns-resize'}`}
         onPointerDown={onPointerDown}
         onWheel={onWheel}
         onKeyDown={onKeyDown}
@@ -117,7 +121,11 @@ export function Knob({ def, value, onChange, onCommit, disabled, display }: Prop
           onChange(def.default)
           onCommit?.()
         }}
-        title={`${def.label}: ${display ?? formatValue(def, value)} · drag or scroll, Shift for fine, double-click to reset`}
+        title={
+          automated
+            ? `${def.label}: ${display ?? formatValue(def, value)} · automated: edit the lane on the timeline`
+            : `${def.label}: ${display ?? formatValue(def, value)} · drag or scroll, Shift for fine, double-click to reset`
+        }
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
           <path d={arcPath(c, c, 15, START, START + ARC)} stroke="var(--color-line)" strokeWidth={4} fill="none" strokeLinecap="round" />
@@ -136,7 +144,10 @@ export function Knob({ def, value, onChange, onCommit, disabled, display }: Prop
           />
         </svg>
       </div>
-      <span className="text-[10px] text-text-dim">{def.label}</span>
+      <span className="text-[10px] text-text-dim">
+        {def.label}
+        {automated && <span className="ml-0.5 font-bold text-accent">A</span>}
+      </span>
       <span className="font-mono text-[10px]">{display ?? formatValue(def, value)}</span>
     </div>
   )

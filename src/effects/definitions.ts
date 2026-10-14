@@ -16,6 +16,8 @@ export interface NumberParam {
   unit: ParamUnit
   /** Log scale for frequencies, times and ratios: equal knob travel per octave or doubling. */
   scale: 'linear' | 'log'
+  /** False for parameters that rebuild audio data when changed, so they can't move smoothly. */
+  automatable?: boolean
 }
 
 export interface ChoiceParam {
@@ -141,7 +143,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     name: 'Reverb',
     description: 'Room and hall ambience.',
     params: [
-      num('decay', 'Decay', 0.2, 10, 2, 's', 'log'),
+      { ...num('decay', 'Decay', 0.2, 10, 2, 's', 'log'), automatable: false },
       num('preDelay', 'Pre-delay', 0, 200, 10, 'ms'),
       num('damping', 'Damping', 1000, 20000, 8000, 'Hz', 'log'),
       num('mix', 'Mix', 0, 100, 25, '%'),
@@ -152,7 +154,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     name: 'Saturation',
     description: 'Warm drive, from subtle thickening to heavy distortion.',
     params: [
-      num('drive', 'Drive', 0, 36, 12, 'dB'),
+      { ...num('drive', 'Drive', 0, 36, 12, 'dB'), automatable: false },
       num('tone', 'Tone', 1000, 20000, 12000, 'Hz', 'log'),
       num('output', 'Output', -24, 6, -6, 'dB'),
       num('mix', 'Mix', 0, 100, 100, '%'),
@@ -210,6 +212,11 @@ export function normalizeEffect(raw: unknown): Effect | null {
     enabled: r.enabled !== false,
     params: { ...defaultParams(type), ...normalizeParams(type, (r.params ?? {}) as Record<string, unknown>) },
   }
+}
+
+/** Numeric parameters of an effect that automation can move. */
+export function automatableParams(type: EffectType): NumberParam[] {
+  return EFFECTS[type].params.filter((p): p is NumberParam => p.kind === 'number' && p.automatable !== false)
 }
 
 export function findParam(type: EffectType, key: string): ParamDef | undefined {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { clipboardItems, deleteClips, duplicateClips, pasteClips } from '../state/actions'
+import { addBus, clipboardItems, deleteClips, duplicateClips, pasteClips } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { playheadPosition, togglePlay } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -14,7 +14,8 @@ function isTyping(target: EventTarget | null): boolean {
 /**
  * Global shortcuts:
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
- * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect
+ * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
+ * Ctrl+Shift+B add bus
  */
 export function useShortcuts() {
   useEffect(() => {
@@ -29,6 +30,10 @@ export function useShortcuts() {
       if (e.code === 'Space' && !mod) {
         handled()
         togglePlay()
+      } else if (mod && e.shiftKey && key === 'b') {
+        handled()
+        addBus()
+        view.setMixerOpen(true)
       } else if (mod && key === 'z') {
         handled()
         if (e.shiftKey) redo()

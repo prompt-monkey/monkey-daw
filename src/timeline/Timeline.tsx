@@ -12,7 +12,7 @@ import { ClipView, type ClipHandle } from './ClipView'
 import { trackColor } from './colors'
 import { applyPreview } from './edits'
 import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHTS, clampPps, laneGridBackground } from './geometry'
-import { startClipGesture, startLaneGesture, type GestureContext } from './gestures'
+import { startClipGesture, startLaneGesture, startTrackReorder, type GestureContext } from './gestures'
 import { Ruler } from './Ruler'
 import { TrackHeader } from './TrackHeader'
 import { usePlayheadFrame } from './usePlayheadFrame'
@@ -167,7 +167,7 @@ export function Timeline() {
   const [viewportWidth, setViewportWidth] = useState(0)
 
   const project = useProjectStore((s) => s.project)
-  const { pps, trackHeight, selection, preview, marquee } = useViewStore()
+  const { pps, trackHeight, selection, preview, marquee, trackDrop } = useViewStore()
   const rowHeight = TRACK_HEIGHTS[trackHeight]
   const tracks = useMemo(() => applyPreview(project.tracks, preview), [project.tracks, preview])
   const grid = useMemo(() => laneGridBackground(pps, project.bpm, project.timeSignature), [pps, project.bpm, project.timeSignature])
@@ -183,6 +183,13 @@ export function Timeline() {
   const gestureContext = useCallback(
     (): GestureContext | null => (lanesRef.current ? { pps, rowHeight, lanes: lanesRef.current } : null),
     [pps, rowHeight],
+  )
+  const onGripDown = useCallback(
+    (e: React.PointerEvent, trackId: string) => {
+      const ctx = gestureContext()
+      if (ctx) startTrackReorder(e, trackId, ctx)
+    },
+    [gestureContext],
   )
 
   useEffect(() => {
@@ -264,7 +271,14 @@ export function Timeline() {
         >
           {tracks.map((track, i) => (
             <div key={track.id} className="flex">
-              <TrackHeader track={track} color={trackColor(i)} compact={trackHeight === 'compact'} height={rowHeight} />
+              <TrackHeader
+                track={track}
+                index={i}
+                color={trackColor(i)}
+                compact={trackHeight === 'compact'}
+                height={rowHeight}
+                onGripDown={onGripDown}
+              />
               <Lane
                 track={track}
                 index={i}
@@ -282,6 +296,12 @@ export function Timeline() {
             <div
               className="pointer-events-none absolute inset-y-0 z-10 border-x border-accent/40 bg-accent/5"
               style={{ left: HEADER_WIDTH + project.loop.start * pps, width: (project.loop.end - project.loop.start) * pps }}
+            />
+          )}
+          {trackDrop !== null && (
+            <div
+              className="pointer-events-none absolute right-0 left-0 z-40 h-0.5 -translate-y-1/2 bg-accent"
+              style={{ top: trackDrop * rowHeight }}
             />
           )}
           {marquee && (

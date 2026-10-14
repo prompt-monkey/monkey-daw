@@ -2,10 +2,10 @@
 // AudioContext clock, so playback stays sample-accurate even when the main thread stutters.
 
 import { createProject } from '../model/factory'
-import type { Project } from '../model/types'
+import type { Id, Project } from '../model/types'
 import { AssetRegistry } from './assets'
 import { getAudioContext } from './context'
-import { MixGraph, type Voice } from './graph'
+import { MixGraph, type MeterReading, type Voice } from './graph'
 import { PlaybackPlanner, clipEvents } from './schedule'
 
 const TICK_MS = 25
@@ -38,9 +38,9 @@ export class AudioEngine {
     return this.planner !== null
   }
 
-  /** Master analyser, for meters. Null until audio has been started once. */
-  get analyser(): AnalyserNode | null {
-    return this.mix?.analyser ?? null
+  /** Current level of a track, a bus or the master. Null until audio has been started once. */
+  readMeter(channelId: Id | 'master'): MeterReading | null {
+    return this.mix?.readMeter(channelId) ?? null
   }
 
   setProject(project: Project) {

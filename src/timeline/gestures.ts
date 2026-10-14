@@ -4,7 +4,7 @@
 
 import { snapTime } from '../model/grid'
 import type { Clip, Project } from '../model/types'
-import { applyClipEdits } from '../state/actions'
+import { applyClipEdits, moveTrack } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { seek } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -155,6 +155,29 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
       applyClipEdits(label, edits)
     },
     handle === 'body' ? 'grabbing' : handle === 'gain' ? 'ns-resize' : 'ew-resize',
+  )
+}
+
+/** Drag a track header's grip to move the track; shows the insertion point while dragging. */
+export function startTrackReorder(e: React.PointerEvent, trackId: string, ctx: GestureContext) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  const count = useProjectStore.getState().project.tracks.length
+  const from = useProjectStore.getState().project.tracks.findIndex((t) => t.id === trackId)
+  const insertionAt = (clientY: number) =>
+    Math.min(count, Math.max(0, Math.round((clientY - ctx.lanes.getBoundingClientRect().top) / ctx.rowHeight)))
+
+  track(
+    e,
+    (ev) => useViewStore.getState().setTrackDrop(insertionAt(ev.clientY)),
+    (ev, moved) => {
+      useViewStore.getState().setTrackDrop(null)
+      if (!ev || !moved) return
+      const at = insertionAt(ev.clientY)
+      // Dropping right above or below itself leaves the order unchanged.
+      if (at !== from && at !== from + 1) moveTrack(trackId, at > from ? at - 1 : at)
+    },
+    'grabbing',
   )
 }
 

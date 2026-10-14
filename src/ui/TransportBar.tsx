@@ -4,6 +4,7 @@ import type { SnapMode } from '../model/types'
 import { setBpm, setLoop, setSnap, setTimeSignature } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
+import { useViewStore } from '../state/viewStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { NumberField } from './NumberField'
 
@@ -39,6 +40,8 @@ export function TransportBar() {
   const undoLabel = useProjectStore((s) => s.history.past.at(-1)?.label)
   const redoLabel = useProjectStore((s) => s.history.future[0]?.label)
   const { undo, redo, endGesture } = useProjectStore.getState()
+  const mixerOpen = useViewStore((s) => s.mixerOpen)
+  const setMixerOpen = useViewStore((s) => s.setMixerOpen)
 
   const button = 'rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm hover:bg-surface disabled:opacity-40'
 
@@ -119,6 +122,14 @@ export function TransportBar() {
       </div>
 
       <div className="ml-auto flex gap-2">
+        <button
+          className={`${button} ${mixerOpen ? 'text-accent' : ''}`}
+          onClick={() => setMixerOpen(!mixerOpen)}
+          aria-pressed={mixerOpen}
+          title="Show or hide the mixer"
+        >
+          Mixer
+        </button>
         <button className={button} onClick={undo} disabled={!canUndo} title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : 'Undo'}>
           Undo
         </button>

@@ -29,6 +29,9 @@ interface ViewStore {
   preview: ClipPreview | null
   clipboard: ClipboardItem[]
   marquee: Marquee | null
+  /** Insertion index shown while a track is dragged to a new position. */
+  trackDrop: number | null
+  mixerOpen: boolean
   setPps: (pps: number) => void
   setTrackHeight: (h: TrackHeight) => void
   setFollowPlayhead: (on: boolean) => void
@@ -37,6 +40,8 @@ interface ViewStore {
   setPreview: (preview: ClipPreview | null) => void
   setClipboard: (items: ClipboardItem[]) => void
   setMarquee: (marquee: Marquee | null) => void
+  setTrackDrop: (index: number | null) => void
+  setMixerOpen: (open: boolean) => void
 }
 
 export const useViewStore = create<ViewStore>()((set) => ({
@@ -47,6 +52,8 @@ export const useViewStore = create<ViewStore>()((set) => ({
   preview: null,
   clipboard: [],
   marquee: null,
+  trackDrop: null,
+  mixerOpen: true,
   setPps: (pps) => set({ pps: clampPps(pps) }),
   setTrackHeight: (trackHeight) => set({ trackHeight }),
   setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -56,4 +63,6 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setPreview: (preview) => set({ preview }),
   setClipboard: (clipboard) => set({ clipboard }),
   setMarquee: (marquee) => set({ marquee }),
+  setTrackDrop: (trackDrop) => set({ trackDrop }),
+  setMixerOpen: (mixerOpen) => set({ mixerOpen }),
 }))

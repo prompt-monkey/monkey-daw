@@ -48,7 +48,28 @@ export interface Track {
   pan: number
   muted: boolean
   solo: boolean
+  /** Where the track's signal goes after its fader: the master, or a bus id. */
+  output: OutputTarget
+  /** Post-fader sends to buses. */
+  sends: Send[]
   clips: Clip[]
+}
+
+export type OutputTarget = 'master' | Id
+
+export interface Send {
+  busId: Id
+  /** Linear send level (1 = 0 dB). */
+  level: number
+}
+
+/** A mix bus: tracks route or send into it, and it feeds the master. */
+export interface Bus {
+  id: Id
+  name: string
+  volume: number
+  pan: number
+  muted: boolean
 }
 
 /** Metadata of an audio file used by the project. The decoded audio lives in the engine. */
@@ -76,5 +97,6 @@ export interface Project {
   loop: LoopRegion
   master: MasterChannel
   tracks: Track[]
+  buses: Bus[]
   assets: Record<Id, AssetMeta>
 }

@@ -1,11 +1,26 @@
-import type { Clip, Id, Project, Track, TrackKind } from './types'
+import type { Bus, Clip, Id, Project, Track, TrackKind } from './types'
 
 export function createId(prefix: string): Id {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
 }
 
 export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
-  return { id: createId('trk'), name, kind, volume: 1, pan: 0, muted: false, solo: false, clips: [] }
+  return {
+    id: createId('trk'),
+    name,
+    kind,
+    volume: 1,
+    pan: 0,
+    muted: false,
+    solo: false,
+    output: 'master',
+    sends: [],
+    clips: [],
+  }
+}
+
+export function createBus(name: string): Bus {
+  return { id: createId('bus'), name, volume: 1, pan: 0, muted: false }
 }
 
 export function createClip(fields: Pick<Clip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<Clip>): Clip {
@@ -23,6 +38,7 @@ export function createProject(name = 'Untitled project'): Project {
     loop: { enabled: false, start: 0, end: 8 },
     master: { volume: 1, muted: false },
     tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),
+    buses: [],
     assets: {},
   }
 }

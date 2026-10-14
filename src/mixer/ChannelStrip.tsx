@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
+import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { EFFECTS } from '../effects/definitions'
 import type { Bus, Effect, Id, Track } from '../model/types'
 import {
@@ -21,7 +22,26 @@ import { VuMeter } from './VuMeter'
 
 const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
 
-function Fader({ label, gain, onChange }: { label: string; gain: number; onChange: (gain: number) => void }) {
+/** Badge shown on controls that automation is driving. */
+const AutoBadge = () => (
+  <span className="ml-0.5 font-bold text-accent" title="Automated">
+    A
+  </span>
+)
+
+const AUTOMATED_TITLE = 'Automated: edit the lane on the timeline'
+
+function Fader({
+  label,
+  gain,
+  onChange,
+  automated = false,
+}: {
+  label: string
+  gain: number
+  onChange: (gain: number) => void
+  automated?: boolean
+}) {
   const endGesture = useProjectStore((s) => s.endGesture)
   return (
     <input
@@ -30,24 +50,39 @@ function Fader({ label, gain, onChange }: { label: string; gain: number; onChang
       max={1}
       step={0.001}
       value={gainToFader(gain)}
+      disabled={automated}
       onChange={(e) => onChange(faderToGain(Number(e.target.value)))}
       onPointerUp={endGesture}
       onKeyUp={endGesture}
-      onDoubleClick={() => onChange(1)}
+      onDoubleClick={() => !automated && onChange(1)}
       aria-label={`${label} volume`}
-      title="Double-click for 0 dB"
-      className="h-full w-6 cursor-pointer"
+      title={automated ? AUTOMATED_TITLE : 'Double-click for 0 dB'}
+      className={`h-full w-6 ${automated ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
     />
   )
 }
 
-function PanSlider({ label, pan, onChange }: { label: string; pan: number; onChange: (pan: number) => void }) {
+function PanSlider({
+  label,
+  pan,
+  onChange,
+  automated = false,
+}: {
+  label: string
+  pan: number
+  onChange: (pan: number) => void
+  automated?: boolean
+}) {
   const endGesture = useProjectStore((s) => s.endGesture)
   return (
     <label className="flex flex-col gap-0.5 text-[10px] text-text-dim">
       <span className="flex justify-between">
-        PAN<span className="font-mono">{pan === 0 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`}</span>
+        <span>
+          PAN
+          {automated && <AutoBadge />}
+        </span>
+        <span className="font-mono">{Math.abs(pan) < 0.005 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`}</span>
       </span>
       <input
         type="range"
@@ -55,12 +90,13 @@ function PanSlider({ label, pan, onChange }: { label: string; pan: number; onCha
         max={1}
         step={0.01}
         value={pan}
+        disabled={automated}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={endGesture}
         onKeyUp={endGesture}
-        onDoubleClick={() => onChange(0)}
+        onDoubleClick={() => !automated && onChange(0)}
         aria-label={`${label} pan`}
-        title="Double-click to center"
+        title={automated ? AUTOMATED_TITLE : 'Double-click to center'}
       />
     </label>
   )
@@ -96,20 +132,38 @@ function StripFrame({ color, children }: { color?: string; children: React.React
   )
 }
 
-function FaderSection({ channelId, label, gain, onChange }: { channelId: Id | 'master'; label: string; gain: number; onChange: (g: number) => void }) {
+function FaderSection({
+  channelId,
+  label,
+  gain,
+  onChange,
+  automated = false,
+}: {
+  channelId: Id | 'master'
+  label: string
+  gain: number
+  onChange: (g: number) => void
+  automated?: boolean
+}) {
   return (
     <>
       <div className="flex min-h-0 flex-1 justify-center gap-2">
-        <Fader label={label} gain={gain} onChange={onChange} />
+        <Fader label={label} gain={gain} onChange={onChange} automated={automated} />
         <LevelMeter channelId={channelId} className="h-full w-2.5" />
       </div>
-      <div className="text-center font-mono text-[11px] text-text-dim">{formatDb(gain)} dB</div>
+      <div className="text-center font-mono text-[11px] text-text-dim">
+        {formatDb(gain)} dB
+        {automated && <AutoBadge />}
+      </div>
     </>
   )
 }
 
 export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { track: Track; color: string; buses: Bus[] }) {
   const endGesture = useProjectStore((s) => s.endGesture)
+  // While automated, the fader and pan follow the automation and can't be moved by hand.
+  const autoVolume = useAutomatedValue(track, 'volume')
+  const autoPan = useAutomatedValue(track, 'pan')
   return (
     <StripFrame color={color}>
       <div className="truncate text-xs font-semibold" title={track.name}>
@@ -158,8 +212,19 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
           })}
         </div>
       )}
-      <PanSlider label={track.name} pan={track.pan} onChange={(v) => setPan(track.id, v)} />
-      <FaderSection channelId={track.id} label={track.name} gain={track.volume} onChange={(g) => setVolume(track.id, g)} />
+      <PanSlider
+        label={track.name}
+        pan={autoPan === null ? track.pan : autoPan * 2 - 1}
+        onChange={(v) => setPan(track.id, v)}
+        automated={autoPan !== null}
+      />
+      <FaderSection
+        channelId={track.id}
+        label={track.name}
+        gain={autoVolume === null ? track.volume : faderToGain(autoVolume)}
+        onChange={(g) => setVolume(track.id, g)}
+        automated={autoVolume !== null}
+      />
       <div className="flex justify-center gap-1">
         <button
           onClick={() => toggleMute(track.id)}

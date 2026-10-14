@@ -52,7 +52,23 @@ export interface Track {
   output: OutputTarget
   /** Post-fader sends to buses. */
   sends: Send[]
+  /** Insert effects, in signal order (before the pan and fader). */
+  effects: Effect[]
+  /** Bypasses the whole effect chain. */
+  fxBypass: boolean
   clips: Clip[]
+}
+
+export type EffectType = 'eq' | 'compressor' | 'filter' | 'delay' | 'reverb' | 'saturation' | 'gate'
+
+/** Parameter values: numbers in real units (Hz, dB, ms…), choices as strings, toggles as booleans. */
+export type EffectParams = Record<string, number | string | boolean>
+
+export interface Effect {
+  id: Id
+  type: EffectType
+  enabled: boolean
+  params: EffectParams
 }
 
 export type OutputTarget = 'master' | Id
@@ -70,6 +86,8 @@ export interface Bus {
   volume: number
   pan: number
   muted: boolean
+  effects: Effect[]
+  fxBypass: boolean
 }
 
 /** Metadata of an audio file used by the project. The decoded audio lives in the engine. */
@@ -84,6 +102,8 @@ export interface AssetMeta {
 export interface MasterChannel {
   volume: number
   muted: boolean
+  effects: Effect[]
+  fxBypass: boolean
 }
 
 export interface Project {

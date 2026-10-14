@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { downloadBlob, exportMix, exportRange, type ExportResult, type ExportSettings } from '../audio/export'
+import { downloadBlob, exportMix, exportRange, suggestedTail, type ExportResult, type ExportSettings } from '../audio/export'
 import { formatTime } from '../model/grid'
 import { formatDb } from '../model/levels'
 import { renameProject } from '../state/actions'
@@ -18,14 +18,16 @@ const formatSize = (bytes: number) =>
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const project = useProjectStore((s) => s.project)
   const [name, setName] = useState(project.name)
+  const tail = suggestedTail(project)
   const [settings, setSettings] = useState<ExportSettings>({
     scope: 'project',
     sampleRate: 44100,
     bitDepth: 16,
+    tail,
   })
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const running = status.kind === 'running'
-  const range = exportRange(project, settings.scope)
+  const range = exportRange(project, settings.scope, settings.tail)
   const loopAvailable = exportRange(project, 'loop') !== null
 
   const run = async () => {
@@ -74,6 +76,21 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             Loop region{!loopAvailable && ' (turn on a loop first)'}
           </label>
         </fieldset>
+
+        {settings.scope === 'project' && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.tail > 0}
+              disabled={running || tail === 0}
+              onChange={(e) => setSettings({ ...settings, tail: e.target.checked ? Math.max(1, tail) : 0 })}
+            />
+            Include effect tails
+            <span className="text-xs text-text-dim">
+              {tail > 0 ? `(+${tail} s so reverb and delay can fade out)` : '(no reverb or delay in this project)'}
+            </span>
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <label className={label}>

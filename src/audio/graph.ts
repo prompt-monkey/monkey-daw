@@ -1,14 +1,15 @@
 // The audio node graph for a project. Works on any BaseAudioContext, so live playback and
 // offline rendering build the same graph.
 //
-//   clip voice ─► track: input ─► panner ─► fader ─┬─► out ─► bus input or master input
+//   clip voice ─► track: input ─► effects ─► panner ─► fader ─┬─► out ─► bus input or master input
 //                                                  ├─► send gain ─► bus input   (post-fader)
 //                                                  └─► meter
-//   bus:    input ─► panner ─► fader ─┬─► out ─► master input
+//   bus:    input ─► effects ─► panner ─► fader ─┬─► out ─► master input
 //                                     └─► meter
-//   master: input ─► fader ─┬─► destination
+//   master: input ─► effects ─► fader ─┬─► destination
 //                           └─► meter
 
+import { EffectChain } from '../effects/chain'
 import type { Id, Project, Send } from '../model/types'
 import { gainEnvelope, trackIsAudible, trimEventStart, type ClipEvent } from './schedule'
 
@@ -60,6 +61,7 @@ class Meter {
 
 interface Strip {
   input: GainNode
+  chain: EffectChain
   panner: StereoPannerNode
   fader: GainNode
   /** Unity gain node after the fader; re-pointed when the routing changes. */
@@ -73,6 +75,7 @@ interface Strip {
 export class MixGraph {
   readonly ctx: BaseAudioContext
   private masterInput: GainNode
+  private masterChain: EffectChain
   private masterFader: GainNode
   private masterMeter: Meter
   private tracks = new Map<Id, Strip>()
@@ -84,7 +87,9 @@ export class MixGraph {
     this.ctx = ctx
     this.masterInput = ctx.createGain()
     this.masterFader = ctx.createGain()
-    this.masterInput.connect(this.masterFader).connect(ctx.destination)
+    this.masterChain = new EffectChain(ctx)
+    this.masterInput.connect(this.masterChain.input)
+    this.masterChain.output.connect(this.masterFader).connect(ctx.destination)
     this.masterMeter = new Meter(ctx, this.masterFader)
   }
 
@@ -96,6 +101,7 @@ export class MixGraph {
     for (const bus of project.buses) {
       const [strip, isNew] = this.ensure(this.buses, bus.id)
       this.route(strip, 'master', this.masterInput)
+      strip.chain.sync(bus.effects, bus.fxBypass, project.bpm, immediate)
       this.setParam(strip.fader.gain, bus.muted ? 0 : bus.volume, immediate || isNew)
       this.setParam(strip.panner.pan, bus.pan, immediate || isNew)
     }
@@ -106,11 +112,13 @@ export class MixGraph {
       if (bus) this.route(strip, track.output, bus.input)
       else this.route(strip, 'master', this.masterInput)
       this.syncSends(strip, track.sends, immediate)
+      strip.chain.sync(track.effects, track.fxBypass, project.bpm, immediate)
       const gain = trackIsAudible(track, project.tracks) ? track.volume : 0
       this.setParam(strip.fader.gain, gain, immediate || isNew)
       this.setParam(strip.panner.pan, track.pan, immediate || isNew)
     }
 
+    this.masterChain.sync(project.master.effects, project.master.fxBypass, project.bpm, immediate)
     this.setParam(this.masterFader.gain, project.master.muted ? 0 : project.master.volume, immediate)
   }
 
@@ -161,6 +169,7 @@ export class MixGraph {
     for (const strip of [...this.tracks.values(), ...this.buses.values()]) this.disconnect(strip)
     this.tracks.clear()
     this.buses.clear()
+    this.masterChain.dispose()
     this.masterFader.disconnect()
     this.masterInput.disconnect()
   }
@@ -172,6 +181,7 @@ export class MixGraph {
     const fader = ctx.createGain()
     const strip: Strip = {
       input: ctx.createGain(),
+      chain: new EffectChain(ctx),
       panner: ctx.createStereoPanner(),
       fader,
       out: ctx.createGain(),
@@ -179,7 +189,8 @@ export class MixGraph {
       routeTo: null,
       sends: new Map(),
     }
-    strip.input.connect(strip.panner).connect(strip.fader).connect(strip.out)
+    strip.input.connect(strip.chain.input)
+    strip.chain.output.connect(strip.panner).connect(strip.fader).connect(strip.out)
     map.set(id, strip)
     return [strip, true]
   }
@@ -193,6 +204,8 @@ export class MixGraph {
   }
 
   private disconnect(strip: Strip) {
+    strip.input.disconnect()
+    strip.chain.dispose()
     strip.fader.disconnect()
     strip.out.disconnect()
     for (const send of strip.sends.values()) send.disconnect()

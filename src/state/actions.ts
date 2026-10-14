@@ -4,7 +4,8 @@
 import { current } from 'immer'
 import { createBus, createClip, createId, createTrack } from '../model/factory'
 import { MAX_GAIN } from '../model/levels'
-import type { AssetMeta, Bus, Clip, Id, OutputTarget, Project, SnapMode, TimeSignature, Track } from '../model/types'
+import { EFFECTS, createEffect, findParam, normalizeParam } from '../effects/definitions'
+import type { AssetMeta, Bus, Clip, Effect, EffectParams, EffectType, Id, OutputTarget, Project, SnapMode, TimeSignature, Track } from '../model/types'
 import { useProjectStore } from './projectStore'
 import type { ClipboardItem } from './viewStore'
 
@@ -276,4 +277,83 @@ export function duplicateClips(clipIds: Id[]): Id[] {
   const start = Math.min(...items.map((i) => i.clip.start))
   const end = Math.max(...items.map((i) => i.clip.start + i.clip.duration))
   return pasteClips(items, start + (end - start), items.length > 1 ? 'Duplicate clips' : 'Duplicate clip')
+}
+
+// --- Effects -------------------------------------------------------------------------------
+
+/** A channel with an effect chain: a track or bus id, or the master. */
+export type ChannelRef = Id | 'master'
+
+function chainHolder(p: Project, ref: ChannelRef): { effects: Effect[]; fxBypass: boolean } | undefined {
+  return ref === 'master' ? p.master : findChannel(p, ref)
+}
+
+/** Adds an effect at `index` (default: the end of the chain). Returns its id. */
+export function addEffect(ref: ChannelRef, type: EffectType, index?: number): Id {
+  const effect = createEffect(type)
+  update(`Add ${EFFECTS[type].name}`, (p) => {
+    const holder = chainHolder(p, ref)
+    holder?.effects.splice(index ?? holder.effects.length, 0, effect)
+  })
+  return effect.id
+}
+
+export function removeEffect(ref: ChannelRef, effectId: Id) {
+  update('Remove effect', (p) => {
+    const holder = chainHolder(p, ref)
+    if (holder) holder.effects = holder.effects.filter((e) => e.id !== effectId)
+  })
+}
+
+export function moveEffect(ref: ChannelRef, effectId: Id, toIndex: number) {
+  update('Reorder effects', (p) => {
+    const holder = chainHolder(p, ref)
+    if (!holder) return
+    const from = holder.effects.findIndex((e) => e.id === effectId)
+    if (from < 0) return
+    const [effect] = holder.effects.splice(from, 1)
+    holder.effects.splice(clamp(toIndex, 0, holder.effects.length), 0, effect)
+  })
+}
+
+export function toggleEffect(ref: ChannelRef, effectId: Id) {
+  update('Toggle effect', (p) => {
+    const effect = chainHolder(p, ref)?.effects.find((e) => e.id === effectId)
+    if (effect) effect.enabled = !effect.enabled
+  })
+}
+
+export function toggleChainBypass(ref: ChannelRef) {
+  update('Toggle effects bypass', (p) => {
+    const holder = chainHolder(p, ref)
+    if (holder) holder.fxBypass = !holder.fxBypass
+  })
+}
+
+/** Sets one parameter; a knob drag is one undo step (call endGesture when it ends). */
+export function setEffectParam(ref: ChannelRef, effectId: Id, key: string, value: number | string | boolean) {
+  update(
+    'Change effect',
+    (p) => {
+      const effect = chainHolder(p, ref)?.effects.find((e) => e.id === effectId)
+      const def = effect && findParam(effect.type, key)
+      if (effect && def) effect.params[key] = normalizeParam(def, value)
+    },
+    `fx:${effectId}:${key}`,
+  )
+}
+
+export interface ChainTemplate {
+  type: EffectType
+  enabled?: boolean
+  params?: EffectParams
+}
+
+/** Replaces a channel's chain with copies of the given effects (e.g. from a preset). */
+export function applyChain(ref: ChannelRef, chain: ChainTemplate[], label: string) {
+  const effects = chain.map((c) => ({ ...createEffect(c.type, c.params ?? {}), enabled: c.enabled ?? true }))
+  update(label, (p) => {
+    const holder = chainHolder(p, ref)
+    if (holder) holder.effects = effects
+  })
 }

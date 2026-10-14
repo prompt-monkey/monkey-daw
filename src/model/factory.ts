@@ -15,12 +15,14 @@ export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
     solo: false,
     output: 'master',
     sends: [],
+    effects: [],
+    fxBypass: false,
     clips: [],
   }
 }
 
 export function createBus(name: string): Bus {
-  return { id: createId('bus'), name, volume: 1, pan: 0, muted: false }
+  return { id: createId('bus'), name, volume: 1, pan: 0, muted: false, effects: [], fxBypass: false }
 }
 
 export function createClip(fields: Pick<Clip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<Clip>): Clip {
@@ -36,7 +38,7 @@ export function createProject(name = 'Untitled project'): Project {
     timeSignature: { beats: 4, unit: 4 },
     snap: 'beat',
     loop: { enabled: false, start: 0, end: 8 },
-    master: { volume: 1, muted: false },
+    master: { volume: 1, muted: false, effects: [], fxBypass: false },
     tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),
     buses: [],
     assets: {},

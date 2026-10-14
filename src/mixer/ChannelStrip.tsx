@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
-import type { Bus, Id, Track } from '../model/types'
+import { EFFECTS } from '../effects/definitions'
+import type { Bus, Effect, Id, Track } from '../model/types'
 import {
   removeBus,
   renameBus,
@@ -14,6 +15,7 @@ import {
   toggleSolo,
 } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
+import { useViewStore } from '../state/viewStore'
 import { LevelMeter } from './LevelMeter'
 import { VuMeter } from './VuMeter'
 
@@ -61,6 +63,25 @@ function PanSlider({ label, pan, onChange }: { label: string; pan: number; onCha
         title="Double-click to center"
       />
     </label>
+  )
+}
+
+/** Opens the channel's effect rack; shows how many effects are active. */
+function FxButton({ channel, effects, bypassed }: { channel: Id | 'master'; effects: Effect[]; bypassed: boolean }) {
+  const openRack = useViewStore((s) => s.openRack)
+  const active = bypassed ? 0 : effects.filter((e) => e.enabled).length
+  return (
+    <button
+      onClick={() => openRack(channel)}
+      className={`${small} ${active ? 'border-accent text-accent' : ''}`}
+      title={
+        effects.length
+          ? `Effects: ${effects.map((e) => EFFECTS[e.type].name).join(', ')}${bypassed ? ' (bypassed)' : ''}`
+          : 'Add effects'
+      }
+    >
+      FX{active ? ` ${active}` : ''}
+    </button>
   )
 }
 
@@ -156,6 +177,7 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
         >
           S
         </button>
+        <FxButton channel={track.id} effects={track.effects} bypassed={track.fxBypass} />
       </div>
     </StripFrame>
   )
@@ -182,7 +204,7 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
       </div>
       <PanSlider label={bus.name} pan={bus.pan} onChange={(v) => setPan(bus.id, v)} />
       <FaderSection channelId={bus.id} label={bus.name} gain={bus.volume} onChange={(g) => setVolume(bus.id, g)} />
-      <div className="flex justify-center">
+      <div className="flex justify-center gap-1">
         <button
           onClick={() => toggleMute(bus.id)}
           className={`${small} ${bus.muted ? 'bg-warn text-accent-ink' : ''}`}
@@ -191,6 +213,7 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
         >
           M
         </button>
+        <FxButton channel={bus.id} effects={bus.effects} bypassed={bus.fxBypass} />
       </div>
     </StripFrame>
   )
@@ -203,7 +226,7 @@ export function MasterStrip() {
       <div className="text-xs font-semibold">Master</div>
       <VuMeter className="h-16 w-full rounded-md border border-line bg-bg" />
       <FaderSection channelId="master" label="Master" gain={master.volume} onChange={setMasterVolume} />
-      <div className="flex justify-center">
+      <div className="flex justify-center gap-1">
         <button
           onClick={toggleMasterMute}
           className={`${small} ${master.muted ? 'bg-warn text-accent-ink' : ''}`}
@@ -212,6 +235,7 @@ export function MasterStrip() {
         >
           M
         </button>
+        <FxButton channel="master" effects={master.effects} bypassed={master.fxBypass} />
       </div>
     </div>
   )

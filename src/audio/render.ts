@@ -1,6 +1,7 @@
 // Offline rendering: the same graph and the same clip events as live playback, rendered
 // faster than real time. Export, consolidate and convert-to-audio build on this.
 
+import { ensureEffectWorklets } from '../effects/nodes'
 import type { Project } from '../model/types'
 import type { AssetRegistry } from './assets'
 import { MixGraph } from './graph'
@@ -31,6 +32,7 @@ export async function renderProject(
   const duration = range.end - range.start
   const length = Math.max(1, Math.ceil(duration * sampleRate))
   const ctx = new OfflineAudioContext(2, length, sampleRate)
+  await ensureEffectWorklets(ctx)
   const mix = new MixGraph(ctx)
   mix.sync(project, true)
   for (const ev of clipEvents(project, { from: range.start, to: range.end, catchUp: true, cutAt: range.end })) {

@@ -75,15 +75,43 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 - VU meter and input meter
 
 ## 9. Effects rack
-- Ordered chain per track, bus and master
-- Effect groups:
-  - **Voice:** auto-pitch, graphic pitch editor, gate
-  - **Dynamics:** EQ, compressor, opto, de-esser, sidechain duck, transient shaper
-  - **Colour:** saturation, clipper, tape, amp, bitcrusher, vinyl, air, tilt, filter, mid/side
-  - **Space:** delay, ping-pong, slapback, reverb, plate, spread
-  - **Modulation:** chorus/width, phaser/flanger, auto-pan/tremolo, vibrato, 12-string doubler
-- BPM-synced parameters
-- Chain presets, built-in and your own
+The rack is built in three batches. Only the rack and batch 1 are built in phase 3; batches 2 and 3
+are deferred to the end of the project (see "Deferred to the end" below).
+
+**Rack (phase 3)**
+- Ordered effect chain per track, bus and master: add, remove, drag to reorder
+- Bypass per effect and for the whole chain
+- Knobs: drag or mouse wheel, double-click to reset, values in real units (Hz, ms, dB, %)
+- BPM-synced parameters (delay time)
+- Same graph live and in exports, so playback and the exported file always match
+- Settings saved in the project, with undo/redo
+- Chain presets: built-in starting points plus your own saved chains
+- Export option to add a tail so reverb and delay decays aren't cut off
+- Every parameter ready to be automated in the Automation step
+
+**Batch 1: essentials (phase 3)**
+| Effect | Parameters |
+|---|---|
+| EQ | Low shelf, peaking mid (with Q), high shelf, low-cut, high-cut |
+| Compressor | Threshold, ratio, knee, attack, release, makeup gain, mix |
+| Filter | Low-, high- or band-pass; cutoff, resonance, mix |
+| Delay | Time (free or BPM-synced), feedback, tone, ping-pong, mix |
+| Reverb | Decay, pre-delay, damping, mix (generated impulse response) |
+| Saturation | Drive, tone, output, mix |
+| Gate | Threshold, attack, release, range |
+
+**Batch 2: character and space (deferred to the end)**
+- Stereo width / chorus, phaser / flanger, tremolo / auto-pan, vibrato
+- Tape (wobble and wear), bitcrusher, soft clipper
+- Tilt EQ, air (high-end lift), mid/side balance
+- Slapback, plate reverb, stereo spread
+- Sidechain duck (BPM-synced pumping, no sidechain input needed)
+
+**Batch 3: specialist, AudioWorklet-based (deferred to the end)**
+- Transient shaper, de-esser, optical-style compressor
+- 12-string doubler, amp/cabinet colour
+- Auto-tune (real-time pitch correction to a key and scale): its own step
+- Graphic pitch editor: optional stretch goal
 
 ## 10. Automation
 - Lanes for effect knobs, volume and pan
@@ -154,9 +182,11 @@ Decisions:
    undo/redo, audio engine and scheduler
 1. **MVP:** Transport → Timeline → Tracks → Mixer → Export (WAV)
 2. Projects and storage → Sample browser → Recording
-3. Effects rack (start with EQ, compressor, delay, reverb, filter) → Automation
+3. Effects rack with batch 1 (EQ, compressor, filter, delay, reverb, saturation, gate) → Automation
 4. Piano roll → Drums → Tempo sync
-5. Remaining effects, the MP3/stems export formats, Lyrics, App shell polish
+5. The MP3/stems export formats, Lyrics, App shell polish
+6. **Deferred to the end:** effects batch 2 (character and space), then batch 3 (specialist and
+   pitch effects), one effect at a time
 
 Why this order:
 - Undo/redo is easy to design in on day one and painful to add later.

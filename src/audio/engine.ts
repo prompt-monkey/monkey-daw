@@ -1,6 +1,7 @@
 // Live playback: a look-ahead scheduler that keeps ~120 ms of audio queued ahead of the
 // AudioContext clock, so playback stays sample-accurate even when the main thread stutters.
 
+import { ensureEffectWorklets } from '../effects/nodes'
 import { createProject } from '../model/factory'
 import type { Id, Project } from '../model/types'
 import { AssetRegistry } from './assets'
@@ -70,6 +71,7 @@ export class AudioEngine {
   async play(from: number, { ignoreLoop = false }: { ignoreLoop?: boolean } = {}) {
     const ctx = this.context
     if (ctx.state !== 'running') await ctx.resume()
+    await ensureEffectWorklets(ctx)
     this.stopVoices()
     this.mix ??= new MixGraph(ctx)
     this.mix.sync(this.project, true)

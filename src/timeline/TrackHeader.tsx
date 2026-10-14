@@ -15,6 +15,7 @@ import {
 import { readInputMeter, toggleArm } from '../recording/session'
 import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
+import { useViewStore } from '../state/viewStore'
 import { Menu } from '../ui/Menu'
 import { HEADER_WIDTH } from './geometry'
 
@@ -111,6 +112,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             items={[
               { label: 'Insert track above', onSelect: () => addTrack(index) },
               { label: 'Insert track below', onSelect: () => addTrack(index + 1) },
+              { label: 'Effects…', onSelect: () => useViewStore.getState().openRack(track.id) },
               { label: 'Duplicate track', onSelect: () => duplicateTrack(track.id) },
               { label: 'Delete track', onSelect: () => removeTrack(track.id), danger: true },
             ]}

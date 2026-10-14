@@ -1,5 +1,5 @@
 import { LibraryPanel } from './library/LibraryPanel'
-import { Mixer } from './mixer/Mixer'
+import { BottomPanel } from './mixer/BottomPanel'
 import { useViewStore } from './state/viewStore'
 import { Timeline } from './timeline/Timeline'
 import { Toaster } from './ui/Toaster'
@@ -17,7 +17,7 @@ export default function App() {
         {libraryOpen && <LibraryPanel />}
         <div className="flex min-w-0 flex-1 flex-col">
           <Timeline />
-          {mixerOpen && <Mixer />}
+          {mixerOpen && <BottomPanel />}
         </div>
       </div>
       <Toaster />

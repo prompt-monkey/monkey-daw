@@ -9,7 +9,7 @@ export function Mixer() {
   const buses = useProjectStore((s) => s.project.buses)
 
   return (
-    <section className="flex h-72 shrink-0 border-t border-line bg-bg" aria-label="Mixer">
+    <div className="flex min-h-0 flex-1" aria-label="Mixer">
       <div className="flex min-w-0 flex-1 overflow-x-auto">
         {tracks.map((track, i) => (
           <TrackStrip key={track.id} track={track} color={trackColor(i)} buses={buses} />
@@ -32,6 +32,6 @@ export function Mixer() {
         </div>
       </div>
       <MasterStrip />
-    </section>
+    </div>
   )
 }

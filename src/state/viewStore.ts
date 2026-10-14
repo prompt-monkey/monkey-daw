@@ -34,6 +34,10 @@ interface ViewStore {
   mixerOpen: boolean
   projectsOpen: boolean
   libraryOpen: boolean
+  /** What the bottom panel shows. */
+  bottomPanel: 'mixer' | 'effects'
+  /** Channel whose effect chain the rack shows. */
+  rackChannel: Id | 'master'
   setPps: (pps: number) => void
   setTrackHeight: (h: TrackHeight) => void
   setFollowPlayhead: (on: boolean) => void
@@ -46,6 +50,9 @@ interface ViewStore {
   setMixerOpen: (open: boolean) => void
   setProjectsOpen: (open: boolean) => void
   setLibraryOpen: (open: boolean) => void
+  setBottomPanel: (panel: 'mixer' | 'effects') => void
+  /** Shows a channel's effects in the bottom panel. */
+  openRack: (channel: Id | 'master') => void
 }
 
 export const useViewStore = create<ViewStore>()((set) => ({
@@ -60,6 +67,8 @@ export const useViewStore = create<ViewStore>()((set) => ({
   mixerOpen: true,
   projectsOpen: false,
   libraryOpen: true,
+  bottomPanel: 'mixer',
+  rackChannel: 'master',
   setPps: (pps) => set({ pps: clampPps(pps) }),
   setTrackHeight: (trackHeight) => set({ trackHeight }),
   setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -73,4 +82,6 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setMixerOpen: (mixerOpen) => set({ mixerOpen }),
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
   setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
+  setBottomPanel: (bottomPanel) => set({ bottomPanel }),
+  openRack: (rackChannel) => set({ rackChannel, bottomPanel: 'effects', mixerOpen: true }),
 }))

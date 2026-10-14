@@ -181,7 +181,7 @@ export function TransportBar() {
         >
           Library
         </button>
-        <button className={button} onClick={() => setExportOpen(true)} title="Export the mix as a WAV file">
+        <button className={button} onClick={() => setExportOpen(true)} title="Export the mix or stems as WAV or MP3">
           Export
         </button>
         {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}

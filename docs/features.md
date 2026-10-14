@@ -5,7 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–4 are built. Every step has unit tests (206 in total) and was checked in Chrome.
+Phases 0–4 and the first step of phase 5 are built. Every step has unit tests (209 in total) and
+was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -20,8 +21,9 @@ Phases 0–4 are built. Every step has unit tests (206 in total) and was checked
 | 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
 | 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `02bc687` |
 | 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `7d0ac05` |
-| 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | |
-| 5 | MP3/stems export, Lyrics, App shell polish | Next | |
+| 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `96f4544` |
+| 5 | Export: MP3, stems as a ZIP | Done | |
+| 5 | Lyrics → App shell polish | Next | |
 | 6 | Effects batches 2 and 3 | Deferred to the end | |
 
 Known gaps in what's built (planned for later steps):
@@ -208,6 +210,12 @@ Exports always wait for the stretched audio.
 - Progress display
 - No restrictions
 
+MP3 and stems added in phase 5. The export dialog chooses the mix or stems, WAV (16 or 24-bit) or
+MP3 (128–320 kbps), the whole project or the loop, and effect tails. Stems are one file per
+unmuted track with clips (solo is ignored), numbered in track order and zipped; each stem goes
+through its buses and the master, so the stems add up to the mix except for effects that react to
+the whole mix (like a master compressor).
+
 ## 13. Projects and storage (local only)
 - Unlimited projects saved in the browser (IndexedDB)
 - New, save, save a copy, rename, delete
@@ -243,7 +251,7 @@ A static app with no backend.
 | Timeline and waveforms | Canvas 2D, peaks computed in a Web Worker | Smooth scrolling and zoom with many clips |
 | Local storage | IndexedDB via Dexie | Projects, recordings and imported samples; request persistent storage |
 | Project file and stems | fflate | Builds the project ZIP (and later the stems ZIP) |
-| MP3 export | lamejs (maintained fork), in a Web Worker | |
+| MP3 export | @breezystack/lamejs (maintained lamejs fork), in the export Web Worker | LGPL-3.0, used unmodified and loaded only in the worker's own file |
 | Time stretch | Our own WSOLA time-stretch in a Web Worker, cached per clip rate | No dependency (SoundTouch's JS port is LGPL); good on loops and drums. Rubber Band WASM later if quality on sustained material matters |
 | MIDI import | Our own small Standard MIDI File reader (notes only) | No dependency needed for reading notes; each track/channel becomes a part |
 | Testing | Vitest (model, scheduler, DSP, storage with fake-indexeddb); browser checks in Chrome | The audio engine needs real-browser checks; automated Playwright tests are still to add |

@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { downloadBlob, exportMix, exportRange, suggestedTail, type ExportResult, type ExportSettings } from '../audio/export'
+import {
+  downloadBlob,
+  exportMix,
+  exportRange,
+  stemTracks,
+  suggestedTail,
+  type ExportResult,
+  type ExportSettings,
+} from '../audio/export'
 import { formatTime } from '../model/grid'
 import { formatDb } from '../model/levels'
 import { renameProject } from '../state/actions'
@@ -21,10 +29,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const tail = suggestedTail(project)
   const [settings, setSettings] = useState<ExportSettings>({
     scope: 'project',
+    content: 'mix',
+    format: 'wav',
     sampleRate: 44100,
     bitDepth: 16,
+    mp3Bitrate: 320,
     tail,
   })
+  const stems = stemTracks(project).length
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const running = status.kind === 'running'
   const range = exportRange(project, settings.scope, settings.tail)
@@ -47,12 +59,48 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const label = 'flex flex-col gap-1 text-xs text-text-dim'
 
   return (
-    <Dialog title="Export mix" onClose={onClose} dismissible={!running}>
+    <Dialog title="Export" onClose={onClose} dismissible={!running}>
       <div className="flex flex-col gap-4">
         <label className={label}>
           Project name (used for the file name)
           <input value={name} onChange={(e) => setName(e.target.value)} className={field} disabled={running} />
         </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <fieldset className="flex flex-col gap-1.5 text-sm" disabled={running}>
+            <legend className="mb-1 text-xs text-text-dim">What</legend>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="content"
+                checked={settings.content === 'mix'}
+                onChange={() => setSettings({ ...settings, content: 'mix' })}
+              />
+              The mix
+            </label>
+            <label className={`flex items-center gap-2 ${stems ? '' : 'opacity-50'}`} title="One file per unmuted track, in a ZIP">
+              <input
+                type="radio"
+                name="content"
+                checked={settings.content === 'stems'}
+                disabled={!stems}
+                onChange={() => setSettings({ ...settings, content: 'stems' })}
+              />
+              Stems ({stems} {stems === 1 ? 'track' : 'tracks'}, ZIP)
+            </label>
+          </fieldset>
+          <fieldset className="flex flex-col gap-1.5 text-sm" disabled={running}>
+            <legend className="mb-1 text-xs text-text-dim">Format</legend>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="format" checked={settings.format === 'wav'} onChange={() => setSettings({ ...settings, format: 'wav' })} />
+              WAV
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="format" checked={settings.format === 'mp3'} onChange={() => setSettings({ ...settings, format: 'mp3' })} />
+              MP3
+            </label>
+          </fieldset>
+        </div>
 
         <fieldset className="flex flex-col gap-1.5 text-sm" disabled={running}>
           <legend className="mb-1 text-xs text-text-dim">Range</legend>
@@ -105,23 +153,40 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               <option value={48000}>48 kHz</option>
             </select>
           </label>
-          <label className={label}>
-            Bit depth
-            <select
-              value={settings.bitDepth}
-              onChange={(e) => setSettings({ ...settings, bitDepth: Number(e.target.value) as ExportSettings['bitDepth'] })}
-              className={field}
-              disabled={running}
-            >
-              <option value={16}>16-bit (dithered)</option>
-              <option value={24}>24-bit</option>
-            </select>
-          </label>
+          {settings.format === 'wav' ? (
+            <label className={label}>
+              Bit depth
+              <select
+                value={settings.bitDepth}
+                onChange={(e) => setSettings({ ...settings, bitDepth: Number(e.target.value) as ExportSettings['bitDepth'] })}
+                className={field}
+                disabled={running}
+              >
+                <option value={16}>16-bit (dithered)</option>
+                <option value={24}>24-bit</option>
+              </select>
+            </label>
+          ) : (
+            <label className={label}>
+              Quality
+              <select
+                value={settings.mp3Bitrate}
+                onChange={(e) => setSettings({ ...settings, mp3Bitrate: Number(e.target.value) as ExportSettings['mp3Bitrate'] })}
+                className={field}
+                disabled={running}
+              >
+                <option value={320}>320 kbps (best)</option>
+                <option value={256}>256 kbps</option>
+                <option value={192}>192 kbps</option>
+                <option value={128}>128 kbps (smallest)</option>
+              </select>
+            </label>
+          )}
         </div>
 
         <p className="text-xs text-text-dim">
           {range
-            ? `WAV, stereo · ${formatTime(range.start)} – ${formatTime(range.end)} (${(range.end - range.start).toFixed(1)} s)`
+            ? `${settings.format.toUpperCase()}, stereo${settings.content === 'stems' ? `, ${stems} stems in a ZIP` : ''} · ${formatTime(range.start)} – ${formatTime(range.end)} (${(range.end - range.start).toFixed(1)} s)`
             : 'Nothing to export yet: add some clips first.'}
         </p>
 
@@ -131,7 +196,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               <div className="h-full bg-accent transition-[width]" style={{ width: `${Math.round(status.progress * 100)}%` }} />
             </div>
             <span className="text-xs text-text-dim">
-              {status.progress < 0.85 ? 'Rendering' : 'Encoding'}… {Math.round(status.progress * 100)}%
+              {settings.content === 'stems' ? 'Rendering stems' : status.progress < 0.85 ? 'Rendering' : 'Encoding'}…{' '}
+              {Math.round(status.progress * 100)}%
             </span>
           </div>
         )}
@@ -139,11 +205,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-1 rounded-md bg-bg p-3 text-xs" role="status">
             <span>
               Saved <strong>{status.result.filename}</strong> · {formatSize(status.result.blob.size)}
+              {status.result.files > 1 && ` · ${status.result.files} files`}
             </span>
-            <span className="text-text-dim">Peak {formatDb(status.result.peak)} dBFS</span>
+            <span className="text-text-dim">
+              {status.result.files > 1 ? 'Loudest stem peaks at' : 'Peak'} {formatDb(status.result.peak)} dBFS
+            </span>
             {status.result.peak > 1 && (
               <span className="text-warn">
-                The mix goes above 0 dBFS and will distort. Lower the master or the loudest tracks and export again.
+                {status.result.files > 1 ? 'A stem' : 'The mix'} goes above 0 dBFS and will distort. Lower the master or the loudest
+                tracks and export again.
               </span>
             )}
             <button
@@ -169,7 +239,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             onClick={run}
             disabled={running || !range}
           >
-            {running ? 'Exporting…' : status.kind === 'done' ? 'Export again' : 'Export WAV'}
+            {running ? 'Exporting…' : status.kind === 'done' ? 'Export again' : `Export ${settings.format.toUpperCase()}`}
           </button>
         </div>
       </div>

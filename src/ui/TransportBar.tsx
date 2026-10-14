@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { barBeatAt, formatTime } from '../model/grid'
 import type { SnapMode } from '../model/types'
 import { setBpm, setLoop, setSnap, setTimeSignature } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
-import { playheadPosition, stop, togglePlay, useTransportStore } from '../state/transport'
+import { stop, togglePlay, useTransportStore } from '../state/transport'
+import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { NumberField } from './NumberField'
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
@@ -12,20 +13,12 @@ function TimeReadout() {
   const timeRef = useRef<HTMLSpanElement>(null)
   const barRef = useRef<HTMLSpanElement>(null)
 
-  // Updated every frame outside React, so playback never re-renders the tree.
-  useEffect(() => {
-    let frame = 0
-    const draw = () => {
-      const t = playheadPosition()
-      const { bpm, timeSignature } = useProjectStore.getState().project
-      const { bar, beat } = barBeatAt(t, bpm, timeSignature)
-      if (timeRef.current) timeRef.current.textContent = formatTime(t)
-      if (barRef.current) barRef.current.textContent = `${bar}.${beat}`
-      frame = requestAnimationFrame(draw)
-    }
-    draw()
-    return () => cancelAnimationFrame(frame)
-  }, [])
+  usePlayheadFrame((t) => {
+    const { bpm, timeSignature } = useProjectStore.getState().project
+    const { bar, beat } = barBeatAt(t, bpm, timeSignature)
+    if (timeRef.current) timeRef.current.textContent = formatTime(t)
+    if (barRef.current) barRef.current.textContent = `${bar}.${beat}`
+  })
 
   return (
     <div className="flex items-baseline gap-3 rounded-lg border border-line bg-bg px-3 py-1.5 font-mono">

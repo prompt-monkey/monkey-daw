@@ -12,6 +12,8 @@
   --color-accent-ink: oklch(20% 0.04 185);
   --color-danger: oklch(65% 0.2 25);
   --color-warn: oklch(82% 0.15 85);
+  --color-grid-bar: oklch(100% 0 0 / 0.12);
+  --color-grid-beat: oklch(100% 0 0 / 0.045);
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;

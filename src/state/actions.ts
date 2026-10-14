@@ -1,9 +1,10 @@
 // Named, undoable edits to the project. UI code calls these instead of mutating the store
 // directly, so every change gets an undo label and gestures coalesce consistently.
 
-import { createClip, createTrack } from '../model/factory'
-import type { AssetMeta, Id, Project, SnapMode, TimeSignature, Track } from '../model/types'
+import { createClip, createId, createTrack } from '../model/factory'
+import type { AssetMeta, Clip, Id, Project, SnapMode, TimeSignature, Track } from '../model/types'
 import { useProjectStore } from './projectStore'
+import type { ClipboardItem } from './viewStore'
 
 const update = (...args: Parameters<ReturnType<typeof useProjectStore.getState>['update']>) =>
   useProjectStore.getState().update(...args)
@@ -104,20 +105,81 @@ export function addAudioClip(trackId: Id, asset: AssetMeta, start: number) {
   })
 }
 
-export function moveClip(trackId: Id, clipId: Id, start: number) {
-  update(
-    'Move clip',
-    (p) => {
-      const c = findTrack(p, trackId)?.clips.find((c) => c.id === clipId)
-      if (c) c.start = Math.max(0, start)
-    },
-    `move:${clipId}`,
-  )
+/** Creates a new track (named after the asset) holding the asset as one clip. */
+export function addTrackWithClip(asset: AssetMeta, start: number): Id {
+  const track = createTrack(asset.name)
+  track.clips.push(createClip({ name: asset.name, assetId: asset.id, start: Math.max(0, start), duration: asset.duration }))
+  update('Import audio', (p) => {
+    p.assets[asset.id] = asset
+    p.tracks.push(track)
+  })
+  return track.id
 }
 
-export function removeClip(trackId: Id, clipId: Id) {
-  update('Delete clip', (p) => {
-    const t = findTrack(p, trackId)
-    if (t) t.clips = t.clips.filter((c) => c.id !== clipId)
+export interface ClipEdit {
+  clipId: Id
+  /** Destination track; the clip moves there if it differs from its current track. */
+  trackId: Id
+  fields: Partial<Clip>
+}
+
+/** Applies the edits of one gesture (move, trim, fade, gain) as a single undo step. */
+export function applyClipEdits(label: string, edits: ClipEdit[]) {
+  update(label, (p) => {
+    for (const edit of edits) {
+      const source = p.tracks.find((t) => t.clips.some((c) => c.id === edit.clipId))
+      const target = findTrack(p, edit.trackId)
+      if (!source || !target) continue
+      const index = source.clips.findIndex((c) => c.id === edit.clipId)
+      const clip = source.clips[index]
+      Object.assign(clip, edit.fields)
+      if (source !== target) {
+        source.clips.splice(index, 1)
+        target.clips.push(clip)
+      }
+    }
   })
+}
+
+export function deleteClips(clipIds: Id[]) {
+  if (!clipIds.length) return
+  const ids = new Set(clipIds)
+  update(clipIds.length > 1 ? 'Delete clips' : 'Delete clip', (p) => {
+    for (const t of p.tracks) t.clips = t.clips.filter((c) => !ids.has(c.id))
+  })
+}
+
+/** Places copies of the given clips at `at`, keeping their relative timing. Returns the new ids. */
+export function pasteClips(items: ClipboardItem[], at: number, label = 'Paste'): Id[] {
+  if (!items.length) return []
+  const earliest = Math.min(...items.map((i) => i.clip.start))
+  const copies = items.map((i) => ({
+    trackId: i.trackId,
+    clip: { ...i.clip, id: createId('clp'), start: Math.max(0, at + i.clip.start - earliest) },
+  }))
+  update(label, (p) => {
+    for (const { trackId, clip } of copies) (findTrack(p, trackId) ?? p.tracks[0])?.clips.push(clip)
+  })
+  return copies.map((c) => c.clip.id)
+}
+
+/** Clips with their track, in the order given. Unknown ids are skipped. */
+export function clipboardItems(p: Project, clipIds: Id[]): ClipboardItem[] {
+  const items: ClipboardItem[] = []
+  for (const id of clipIds) {
+    for (const t of p.tracks) {
+      const clip = t.clips.find((c) => c.id === id)
+      if (clip) items.push({ clip, trackId: t.id })
+    }
+  }
+  return items
+}
+
+/** Copies the clips right after the end of the group. Returns the new ids. */
+export function duplicateClips(clipIds: Id[]): Id[] {
+  const items = clipboardItems(useProjectStore.getState().project, clipIds)
+  if (!items.length) return []
+  const start = Math.min(...items.map((i) => i.clip.start))
+  const end = Math.max(...items.map((i) => i.clip.start + i.clip.duration))
+  return pasteClips(items, start + (end - start), items.length > 1 ? 'Duplicate clips' : 'Duplicate clip')
 }

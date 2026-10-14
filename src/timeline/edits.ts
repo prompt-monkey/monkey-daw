@@ -54,19 +54,22 @@ function fitFades(fadeIn: number, fadeOut: number, duration: number): Pick<Clip,
   return { fadeIn: fi, fadeOut: Math.min(fadeOut, duration - fi) }
 }
 
-/** Moves the clip's left edge, keeping its right edge (and the audio under it) in place. */
-export function trimStart(clip: Clip, newStart: number): Partial<Clip> {
-  const earliest = Math.max(0, clip.start - clip.offset)
+/**
+ * Moves the clip's left edge, keeping its right edge (and the audio under it) in place. `rate`
+ * is the clip's audio seconds per timeline second (synced clips).
+ */
+export function trimStart(clip: Clip, newStart: number, rate = 1): Partial<Clip> {
+  const earliest = Math.max(0, clip.start - clip.offset / rate)
   const latest = clip.start + clip.duration - MIN_CLIP_DURATION
   const start = Math.min(latest, Math.max(earliest, newStart))
   const shift = start - clip.start
   const duration = clip.duration - shift
-  return { start, offset: clip.offset + shift, duration, ...fitFades(clip.fadeIn, clip.fadeOut, duration) }
+  return { start, offset: clip.offset + shift * rate, duration, ...fitFades(clip.fadeIn, clip.fadeOut, duration) }
 }
 
 /** Moves the clip's right edge, up to the end of its audio. */
-export function trimEnd(clip: Clip, assetDuration: number, newEnd: number): Partial<Clip> {
-  const latest = clip.start + Math.max(MIN_CLIP_DURATION, assetDuration - clip.offset)
+export function trimEnd(clip: Clip, assetDuration: number, newEnd: number, rate = 1): Partial<Clip> {
+  const latest = clip.start + Math.max(MIN_CLIP_DURATION, (assetDuration - clip.offset) / rate)
   const end = Math.min(latest, Math.max(clip.start + MIN_CLIP_DURATION, newEnd))
   const duration = end - clip.start
   return { duration, ...fitFades(clip.fadeIn, clip.fadeOut, duration) }

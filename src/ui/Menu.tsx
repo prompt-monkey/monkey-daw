@@ -14,27 +14,13 @@ interface Props {
   children: React.ReactNode
 }
 
-/**
- * A button that opens a small list of actions. The list is rendered into document.body with
- * fixed positioning, so neighbouring sticky elements (like the next track header) never cover
- * it. Closes on selection, outside click, Escape, scroll or resize.
- */
-export function Menu({ items, label, className = '', children }: Props) {
-  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null)
-  const button = useRef<HTMLButtonElement>(null)
-  const list = useRef<HTMLDivElement>(null)
-
-  const toggle = () => {
-    const rect = button.current?.getBoundingClientRect()
-    setAnchor(anchor || !rect ? null : { top: rect.bottom + 4, right: window.innerWidth - rect.right })
-  }
-
+/** Closes a menu on an outside click (outside `inside` elements), Escape, scroll or resize. */
+function useDismiss(open: boolean, inside: React.RefObject<HTMLElement | null>[], dismiss: () => void) {
   useEffect(() => {
-    if (!anchor) return
-    const dismiss = () => setAnchor(null)
+    if (!open) return
     const onPointer = (e: PointerEvent) => {
       const target = e.target as Node
-      if (!button.current?.contains(target) && !list.current?.contains(target)) dismiss()
+      if (!inside.some((r) => r.current?.contains(target))) dismiss()
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && dismiss()
     window.addEventListener('pointerdown', onPointer)
@@ -47,7 +33,58 @@ export function Menu({ items, label, className = '', children }: Props) {
       window.removeEventListener('scroll', dismiss, true)
       window.removeEventListener('resize', dismiss)
     }
-  }, [anchor])
+    // The refs are stable; only opening and closing matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, dismiss])
+}
+
+function MenuList({
+  items,
+  style,
+  listRef,
+  onClose,
+}: {
+  items: MenuItem[]
+  style: React.CSSProperties
+  listRef: React.RefObject<HTMLDivElement | null>
+  onClose: () => void
+}) {
+  return createPortal(
+    <div ref={listRef} role="menu" className="fixed z-[100] min-w-40 rounded-md border border-line bg-surface-2 py-1 shadow-xl" style={style}>
+      {items.map((item) => (
+        <button
+          key={item.label}
+          role="menuitem"
+          className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-surface ${item.danger ? 'text-danger' : ''}`}
+          onClick={() => {
+            onClose()
+            item.onSelect()
+          }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * A button that opens a small list of actions. The list is rendered into document.body with
+ * fixed positioning, so neighbouring sticky elements (like the next track header) never cover
+ * it. Closes on selection, outside click, Escape, scroll or resize.
+ */
+export function Menu({ items, label, className = '', children }: Props) {
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const [close] = useState(() => () => setAnchor(null))
+  useDismiss(anchor !== null, [button, list], close)
+
+  const toggle = () => {
+    const rect = button.current?.getBoundingClientRect()
+    setAnchor(anchor || !rect ? null : { top: rect.bottom + 4, right: window.innerWidth - rect.right })
+  }
 
   return (
     <>
@@ -61,30 +98,16 @@ export function Menu({ items, label, className = '', children }: Props) {
       >
         {children}
       </button>
-      {anchor &&
-        createPortal(
-          <div
-            ref={list}
-            role="menu"
-            className="fixed z-[100] min-w-40 rounded-md border border-line bg-surface-2 py-1 shadow-xl"
-            style={{ top: anchor.top, right: anchor.right }}
-          >
-            {items.map((item) => (
-              <button
-                key={item.label}
-                role="menuitem"
-                className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-surface ${item.danger ? 'text-danger' : ''}`}
-                onClick={() => {
-                  setAnchor(null)
-                  item.onSelect()
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
+      {anchor && <MenuList items={items} style={{ top: anchor.top, right: anchor.right }} listRef={list} onClose={close} />}
     </>
   )
+}
+
+/** A menu opened at a point (right-click). Kept inside the window. */
+export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
+  const list = useRef<HTMLDivElement>(null)
+  useDismiss(true, [list], onClose)
+  const left = Math.min(x, window.innerWidth - 200)
+  const top = Math.min(y, window.innerHeight - (items.length * 28 + 16))
+  return <MenuList items={items} style={{ left, top }} listRef={list} onClose={onClose} />
 }

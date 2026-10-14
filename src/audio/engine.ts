@@ -9,15 +9,19 @@ import { getAudioContext } from './context'
 import { MixGraph, type MeterReading, type Voice } from './graph'
 import { beatsInWindow, scheduleClick } from './metronome'
 import { PlaybackPlanner, clipEvents, noteEvents, patternProject } from './schedule'
+import { clipBuffer, onStretchReady, prepareStretches } from './stretch'
 
 const TICK_MS = 25
 const LOOKAHEAD = 0.12
 /** Delay before the first scheduled audio, so the first window is never late. */
 const START_DELAY = 0.03
 
+/** Wait after the last change before stretching audio (a tempo drag makes many changes). */
+const STRETCH_DELAY_MS = 250
+
 /** True when something that affects which clips play changed (not just mixer values). */
 function timelineChanged(prev: Project, next: Project): boolean {
-  if (prev.loop !== next.loop || prev.assets !== next.assets || prev.bpm !== next.bpm) return true
+  if (prev.loop !== next.loop || prev.assets !== next.assets || prev.bpm !== next.bpm || prev.syncMode !== next.syncMode) return true
   if (prev.tracks.length !== next.tracks.length) return true
   return next.tracks.some(
     (t, i) =>
@@ -44,6 +48,12 @@ export class AudioEngine {
   private origin: { time: number; ctxTime: number } | null = null
   /** In pattern mode only this clip plays, looping over its length. */
   private pattern: Id | null = null
+  private stretchTimer: ReturnType<typeof setTimeout> | null = null
+
+  constructor() {
+    // Clips that were resampled while their stretched audio was being made switch over to it.
+    onStretchReady(() => this.restart())
+  }
 
   /** Metronome settings, read on every scheduling tick. */
   readonly metronome = {
@@ -70,6 +80,8 @@ export class AudioEngine {
   setProject(project: Project) {
     const prev = this.project
     this.project = project
+    if (this.stretchTimer) clearTimeout(this.stretchTimer)
+    this.stretchTimer = setTimeout(() => void prepareStretches(this.project, this.assets), STRETCH_DELAY_MS)
     this.mix?.sync(project, false, this.planner ? null : this.restingPosition)
     if (this.planner && timelineChanged(prev, project)) this.restart()
   }
@@ -179,9 +191,9 @@ export class AudioEngine {
       }
       mix.scheduleAutomation(project, window, ctxOffset)
       for (const ev of clipEvents(project, window)) {
-        const buffer = this.assets.get(ev.clip.assetId)
-        if (!buffer) continue
-        const voice = mix.playClip(ev, buffer, ev.at + ctxOffset, () => this.voices.delete(voice!))
+        const source = clipBuffer(project, this.assets, ev.clip.assetId, ev.rate)
+        if (!source) continue
+        const voice = mix.playClip(ev, source.buffer, ev.at + ctxOffset, () => this.voices.delete(voice!), source.stretched)
         if (voice) this.voices.add(voice)
       }
       for (const ev of noteEvents(project, window)) {

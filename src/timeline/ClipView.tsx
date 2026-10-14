@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from 'react'
 import { peakRange } from '../audio/peaks'
 import { usePeaks } from '../audio/peaksCache'
 import { beatSeconds } from '../model/midi'
+import { clipRate } from '../model/tempo'
 import { isMidiClip, type Clip, type Note } from '../model/types'
 import { useProjectStore } from '../state/projectStore'
 import { MAX_CLIP_GAIN, formatGain } from './edits'
@@ -16,13 +17,15 @@ interface WaveformProps {
   assetId: string
   offset: number
   duration: number
+  /** Seconds of audio per second of timeline (synced clips). */
+  rate: number
   gain: number
   width: number
   height: number
   color: string
 }
 
-function Waveform({ assetId, offset, duration, gain, width, height, color }: WaveformProps) {
+function Waveform({ assetId, offset, duration, rate, gain, width, height, color }: WaveformProps) {
   const ref = useRef<HTMLCanvasElement>(null)
   const peaks = usePeaks(assetId)
 
@@ -41,7 +44,7 @@ function Waveform({ assetId, offset, duration, gain, width, height, color }: Wav
     g.fillStyle = color
     const mid = h / 2
     const scale = Math.min(gain, MAX_CLIP_GAIN) * mid * 0.95
-    const secondsPerPx = duration / w
+    const secondsPerPx = (duration * rate) / w
     for (let x = 0; x < w; x++) {
       const t0 = offset + x * secondsPerPx
       const [lo, hi] = peakRange(peaks, t0, t0 + secondsPerPx)
@@ -49,7 +52,7 @@ function Waveform({ assetId, offset, duration, gain, width, height, color }: Wav
       const bottom = mid - Math.max(-1, lo) * scale
       g.fillRect(x, top, 1, Math.max(1, bottom - top))
     }
-  }, [peaks, offset, duration, gain, width, height, color])
+  }, [peaks, offset, duration, rate, gain, width, height, color])
 
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" />
 }
@@ -115,6 +118,7 @@ interface Props {
   onPointerDown: (e: React.PointerEvent, clip: Clip, handle: ClipHandle) => void
   onResetGain: (clip: Clip) => void
   onOpen?: (clip: Clip) => void
+  onMenu?: (e: React.MouseEvent, clip: Clip) => void
   /** Drum tracks: the pad notes, in row order. */
   noteRows?: number[]
 }
@@ -128,8 +132,11 @@ export const ClipView = memo(function ClipView({
   onPointerDown,
   onResetGain,
   onOpen,
+  onMenu,
   noteRows,
 }: Props) {
+  const rate = clipRate(clip, useProjectStore((s) => s.project.bpm))
+  const synced = !isMidiClip(clip) && clip.sourceBpm !== undefined
   const width = Math.max(2, clip.duration * pps)
   const bodyHeight = height - 4
   const showName = height >= 48
@@ -153,6 +160,10 @@ export const ClipView = memo(function ClipView({
         if ((e.target as HTMLElement).closest('[data-handle]')) return
         onOpen?.(clip)
       }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onMenu?.(e, clip)
+      }}
       className={`group absolute top-0.5 cursor-grab overflow-hidden rounded-md border select-none ${
         selected ? 'border-text ring-1 ring-text' : 'border-black/40'
       }`}
@@ -162,11 +173,14 @@ export const ClipView = memo(function ClipView({
         height: bodyHeight,
         background: `color-mix(in oklch, ${color} ${selected ? 32 : 22}%, var(--color-surface))`,
       }}
-      title={`${clip.name} · gain ${formatGain(clip.gain)}${isMidiClip(clip) ? ' · double-click to edit the notes' : ''}`}
+      title={`${clip.name} · gain ${formatGain(clip.gain)}${synced ? ` · synced from ${clip.sourceBpm} BPM` : ''}${
+        isMidiClip(clip) ? ' · double-click to edit the notes' : ''
+      } · right-click for options`}
     >
       {showName && (
-        <div className="pointer-events-none truncate px-1.5 text-[11px] leading-4 font-semibold" style={{ height: NAME_HEIGHT, color }}>
-          {clip.name}
+        <div className="pointer-events-none flex gap-1 px-1.5 text-[11px] leading-4 font-semibold" style={{ height: NAME_HEIGHT, color }}>
+          <span className="truncate">{clip.name}</span>
+          {synced && <span className="shrink-0 font-mono text-[10px] font-normal text-text-dim">♩{clip.sourceBpm}</span>}
         </div>
       )}
       <div className="absolute inset-x-0" style={{ top: waveTop, height: waveHeight }}>
@@ -185,6 +199,7 @@ export const ClipView = memo(function ClipView({
             assetId={clip.assetId}
             offset={clip.offset}
             duration={clip.duration}
+            rate={rate}
             gain={clip.gain}
             width={width}
             height={waveHeight}

@@ -14,6 +14,9 @@ export interface TimeSignature {
 
 export type SnapMode = 'off' | 'bar' | 'beat'
 
+/** How synced audio clips follow the tempo: keeping their pitch, or like a record sped up. */
+export type SyncMode = 'stretch' | 'resample'
+
 export interface LoopRegion {
   enabled: boolean
   start: number
@@ -40,6 +43,12 @@ interface ClipBase {
 /** A clip playing part of an audio asset. */
 export interface AudioClip extends ClipBase {
   assetId: Id
+  /**
+   * The tempo the audio was made at. When set, the clip is synced: it plays at project BPM ÷
+   * this, and keeps its place in bars when the tempo changes. `offset` is then in the audio's
+   * own seconds, while `start`, `duration` and the fades are in timeline seconds.
+   */
+  sourceBpm?: number
 }
 
 /**
@@ -228,6 +237,7 @@ export interface Project {
   bpm: number
   timeSignature: TimeSignature
   snap: SnapMode
+  syncMode: SyncMode
   loop: LoopRegion
   master: MasterChannel
   tracks: Track[]

@@ -3,6 +3,7 @@
 // working when the clip re-renders in another lane. Escape cancels a gesture.
 
 import { snapTime } from '../model/grid'
+import { clipRate } from '../model/tempo'
 import { isMidiClip, type Clip, type Project } from '../model/types'
 import { applyClipEdits, moveTrack } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
@@ -115,6 +116,7 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
   if (!own) return
   // MIDI clips can be extended freely; audio clips end where their audio ends.
   const assetDuration = isMidiClip(clip) ? Infinity : (project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration)
+  const rate = clipRate(clip, project.bpm)
   const startTrack = trackIndexAt(ctx, e.clientY)
   const x0 = e.clientX
   const y0 = e.clientY
@@ -131,10 +133,10 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
           preview = moveClips(group, clip, dt, trackIndexAt(ctx, ev.clientY) - startTrack, trackIds, snap, trackKinds)
           break
         case 'trim-start':
-          preview = only(trimStart(clip, snap(clip.start + dt)))
+          preview = only(trimStart(clip, snap(clip.start + dt), rate))
           break
         case 'trim-end':
-          preview = only(trimEnd(clip, assetDuration, snap(clip.start + clip.duration + dt)))
+          preview = only(trimEnd(clip, assetDuration, snap(clip.start + clip.duration + dt), rate))
           break
         case 'fade-in':
           preview = only(setFadeIn(clip, clip.fadeIn + dt))

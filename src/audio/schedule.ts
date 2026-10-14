@@ -2,6 +2,7 @@
 // window of timeline time, and with what gain envelope. No Web Audio calls in this file.
 
 import { beatSeconds } from '../model/midi'
+import { clipRate } from '../model/tempo'
 import { isMidiClip, type AudioClip, type Clip, type Id, type LoopRegion, type Project, type Track } from '../model/types'
 
 /** One audio clip (or the remaining part of one) to be played as a single voice. */
@@ -14,8 +15,10 @@ export interface ClipEvent {
   clipTime: number
   /** Position inside the asset where playback starts. */
   assetOffset: number
-  /** How long the voice sounds. */
+  /** How long the voice sounds, in timeline seconds. */
   duration: number
+  /** Seconds of audio per second of timeline: above 1 a synced clip plays faster than recorded. */
+  rate: number
 }
 
 export interface ScheduleWindow {
@@ -52,7 +55,8 @@ export function clipEvents(project: Project, w: ScheduleWindow): ClipEvent[] {
       const duration = Math.min(clipEnd, cutAt) - at
       if (duration <= EPSILON) continue
       const clipTime = at - clip.start
-      events.push({ trackId: track.id, clip, at, clipTime, assetOffset: clip.offset + clipTime, duration })
+      const rate = clipRate(clip, project.bpm)
+      events.push({ trackId: track.id, clip, at, clipTime, assetOffset: clip.offset + clipTime * rate, duration, rate })
     }
   }
   return events
@@ -140,7 +144,7 @@ export function trimEventStart(ev: ClipEvent, delta: number): ClipEvent | null {
     ...ev,
     at: ev.at + delta,
     clipTime: ev.clipTime + delta,
-    assetOffset: ev.assetOffset + delta,
+    assetOffset: ev.assetOffset + delta * ev.rate,
     duration: ev.duration - delta,
   }
 }

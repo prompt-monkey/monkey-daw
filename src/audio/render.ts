@@ -6,6 +6,7 @@ import type { Project } from '../model/types'
 import type { AssetRegistry } from './assets'
 import { MixGraph } from './graph'
 import { clipEvents, noteEvents } from './schedule'
+import { clipBuffer, prepareStretches } from './stretch'
 
 export interface RenderRange {
   start: number
@@ -31,6 +32,8 @@ export async function renderProject(
 ): Promise<AudioBuffer> {
   const duration = range.end - range.start
   const length = Math.max(1, Math.ceil(duration * sampleRate))
+  // Exports always use the stretched audio, so wait for it.
+  await prepareStretches(project, assets)
   const ctx = new OfflineAudioContext(2, length, sampleRate)
   await ensureEffectWorklets(ctx)
   const mix = new MixGraph(ctx)
@@ -38,8 +41,8 @@ export async function renderProject(
   mix.scheduleAutomation(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
   const window = { from: range.start, to: range.end, catchUp: true, cutAt: range.end }
   for (const ev of clipEvents(project, window)) {
-    const buffer = assets.get(ev.clip.assetId)
-    if (buffer) mix.playClip(ev, buffer, ev.at - range.start)
+    const source = clipBuffer(project, assets, ev.clip.assetId, ev.rate)
+    if (source) mix.playClip(ev, source.buffer, ev.at - range.start, undefined, source.stretched)
   }
   const audio = (id: string) => assets.get(id)
   for (const ev of noteEvents(project, window)) {

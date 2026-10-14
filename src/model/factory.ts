@@ -49,6 +49,7 @@ export function createProject(name = 'Untitled project'): Project {
     bpm: 120,
     timeSignature: { beats: 4, unit: 4 },
     snap: 'beat',
+    syncMode: 'stretch',
     loop: { enabled: false, start: 0, end: 8 },
     master: { volume: 1, muted: false, effects: [], fxBypass: false },
     tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),

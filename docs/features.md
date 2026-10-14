@@ -5,8 +5,7 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–3, the piano roll and drums are built. Every step has unit tests (195 in total) and was
-checked in Chrome.
+Phases 0–4 are built. Every step has unit tests (206 in total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -20,14 +19,14 @@ checked in Chrome.
 | 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `177f1a8`, `1588287` |
 | 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
 | 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `02bc687` |
-| 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | |
-| 4 | Tempo sync | Next | |
-| 5 | MP3/stems export, Lyrics, App shell polish | Planned | |
+| 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `7d0ac05` |
+| 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | |
+| 5 | MP3/stems export, Lyrics, App shell polish | Next | |
 | 6 | Effects batches 2 and 3 | Deferred to the end | |
 
 Known gaps in what's built (planned for later steps):
-- Timeline: reverse, pitch and stretch on clips, curved clip fades, consolidate and
-  convert-to-audio; clips can only be renamed in the piano roll (MIDI clips)
+- Timeline: reverse, pitch shift and free stretching of clips, curved clip fades, consolidate
+  and convert-to-audio (clips stretch only through tempo sync)
 - Mixer and automation: automation on buses and the master, writing automation by moving a knob
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
@@ -193,6 +192,15 @@ data, so they can't move smoothly).
 - Samples with a BPM in their filename fit the project tempo
 - Stretch mode (keeps the pitch) vs. Resample mode (pitch follows tempo)
 
+Built in phase 4. An audio clip whose name gives a tempo ("Loop 95bpm", "drums_128_BPM", or a bare
+number such as "Guitar_92_Am" when the sample lasts whole beats at that tempo) is synced when it
+is placed: it plays at project BPM ÷ its tempo and, like MIDI and drum clips, keeps its place in
+bars when the tempo changes. Right-click a clip to sync it by hand, change its original tempo,
+stop syncing, rename, duplicate or delete it. The mode next to the BPM applies to the whole
+project: Stretch keeps the pitch (our own WSOLA time-stretch, run in a worker and cached; until
+it's ready, playback resamples for a moment), Resample speeds the audio up or down like a record.
+Exports always wait for the stretched audio.
+
 ## 12. Export
 - WAV and MP3 mix
 - Stems as a ZIP
@@ -236,7 +244,7 @@ A static app with no backend.
 | Local storage | IndexedDB via Dexie | Projects, recordings and imported samples; request persistent storage |
 | Project file and stems | fflate | Builds the project ZIP (and later the stems ZIP) |
 | MP3 export | lamejs (maintained fork), in a Web Worker | |
-| Time stretch / pitch shift | SoundTouch (WASM/worklet) first; Rubber Band WASM later if quality matters | The hardest DSP part, best left to a library |
+| Time stretch | Our own WSOLA time-stretch in a Web Worker, cached per clip rate | No dependency (SoundTouch's JS port is LGPL); good on loops and drums. Rubber Band WASM later if quality on sustained material matters |
 | MIDI import | Our own small Standard MIDI File reader (notes only) | No dependency needed for reading notes; each track/channel becomes a part |
 | Testing | Vitest (model, scheduler, DSP, storage with fake-indexeddb); browser checks in Chrome | The audio engine needs real-browser checks; automated Playwright tests are still to add |
 | Hosting | Any static host (GitHub Pages, Netlify, Cloudflare Pages); optional PWA for offline use | No server needed |
@@ -276,7 +284,7 @@ Dependencies:
 
 | Feature | Difficulty | Why / approach |
 |---|---|---|
-| Time stretch / pitch shift that keeps quality (Tempo sync, clip pitch) | High | Use a library such as SoundTouch or Rubber Band compiled to WebAssembly rather than writing your own |
+| Time stretch / pitch shift that keeps quality (Tempo sync, clip pitch) | High | Tempo sync uses our own WSOLA; heavy stretches of sustained tones can warble. Clip pitch shift and better quality may need Rubber Band compiled to WebAssembly |
 | Graphic pitch editor | Very high | Melodyne-style: pitch detection, a note-blob UI, then resynthesis. Defer it, or cut it |
 | Auto-pitch | Medium-high | An AudioWorklet with pitch detection (YIN) and period shifting |
 | Timeline performance | Medium | Waveforms on canvas, a virtualised track list, no React re-render on every frame |

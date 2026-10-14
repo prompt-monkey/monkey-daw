@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { barBeatAt, formatTime } from '../model/grid'
-import type { SnapMode } from '../model/types'
-import { setBpm, setLoop, setSnap, setTimeSignature } from '../state/actions'
+import type { SnapMode, SyncMode } from '../model/types'
+import { setBpm, setLoop, setSnap, setSyncMode, setTimeSignature } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -69,6 +69,7 @@ export function TransportBar() {
   const bpm = useProjectStore((s) => s.project.bpm)
   const ts = useProjectStore((s) => s.project.timeSignature)
   const snap = useProjectStore((s) => s.project.snap)
+  const syncMode = useProjectStore((s) => s.project.syncMode)
   const loop = useProjectStore((s) => s.project.loop)
   const canUndo = useProjectStore((s) => s.history.past.length > 0)
   const canRedo = useProjectStore((s) => s.history.future.length > 0)
@@ -111,6 +112,16 @@ export function TransportBar() {
           }}
           className="w-16"
         />
+        <select
+          value={syncMode}
+          onChange={(e) => setSyncMode(e.target.value as SyncMode)}
+          aria-label="Tempo sync mode"
+          title="How audio clips synced to the tempo (loops with a BPM in their name) follow it: Stretch keeps their pitch, Resample changes speed and pitch together"
+          className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-text"
+        >
+          <option value="stretch">Stretch</option>
+          <option value="resample">Resample</option>
+        </select>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-text-dim">

@@ -6,6 +6,7 @@ import { createBus, createClip, createId, createMidiClip, createTrack } from '..
 import { createKit } from '../drums/kits'
 import { secondsPerBar } from '../model/grid'
 import { beatSeconds, notesEnd, sortNotes } from '../model/midi'
+import { MAX_SOURCE_BPM, MIN_SOURCE_BPM, clipRate, detectBpm } from '../model/tempo'
 import { MAX_GAIN } from '../model/levels'
 import { EFFECTS, createEffect, findParam, normalizeParam } from '../effects/definitions'
 import { insertPoint } from '../automation/curve'
@@ -30,6 +31,7 @@ import {
   type OutputTarget,
   type Project,
   type SnapMode,
+  type SyncMode,
   type SynthPreset,
   type TimeSignature,
   type Track,
@@ -205,8 +207,9 @@ export function renameProject(name: string) {
 }
 
 /**
- * Changes the tempo. MIDI clips keep their place in bars and beats: their position, length and
- * fades scale with the tempo, so their notes stay on the grid. Audio clips stay where they are.
+ * Changes the tempo. Note clips and synced audio clips keep their place in bars and beats: their
+ * position, length and fades scale with the tempo (a synced clip's audio plays faster or slower
+ * to fill it). Other audio clips stay where they are.
  */
 export function setBpm(bpm: number) {
   update(
@@ -218,9 +221,10 @@ export function setBpm(bpm: number) {
       if (ratio === 1) return
       for (const t of p.tracks) {
         for (const c of t.clips) {
-          if (!isMidiClip(c)) continue
+          if (!isMidiClip(c) && !c.sourceBpm) continue
           c.start *= ratio
-          c.offset *= ratio
+          // A synced clip's offset is in its audio's own seconds, which don't change.
+          if (isMidiClip(c)) c.offset *= ratio
           c.duration *= ratio
           c.fadeIn *= ratio
           c.fadeOut *= ratio
@@ -235,6 +239,10 @@ export function setTimeSignature(timeSignature: TimeSignature) {
   update('Change time signature', (p) => void (p.timeSignature = timeSignature))
 }
 
+export function setSyncMode(syncMode: SyncMode) {
+  update('Change tempo sync', (p) => void (p.syncMode = syncMode))
+}
+
 export function setSnap(snap: SnapMode) {
   update('Change snap', (p) => void (p.snap = snap))
 }
@@ -247,20 +255,36 @@ export function setLoop(loop: Partial<Project['loop']>) {
   })
 }
 
+/**
+ * A clip playing a whole asset from `start`. If the asset's name gives its tempo (e.g.
+ * "Loop 95 BPM"), the clip is synced to the project tempo.
+ */
+function clipForAsset(asset: AssetMeta, start: number, bpm: number) {
+  const sourceBpm = detectBpm(asset.name, asset.duration)
+  const rate = sourceBpm ? bpm / sourceBpm : 1
+  return createClip({
+    name: asset.name,
+    assetId: asset.id,
+    start: Math.max(0, start),
+    duration: asset.duration / rate,
+    ...(sourceBpm ? { sourceBpm } : {}),
+  })
+}
+
 /** Registers an audio asset and places it as a clip on an audio track. */
 export function addAudioClip(trackId: Id, asset: AssetMeta, start: number, label = 'Add clip') {
   update(label, (p) => {
     const t = findTrack(p, trackId)
     if (!t || t.kind !== 'audio') return
     p.assets[asset.id] = asset
-    t.clips.push(createClip({ name: asset.name, assetId: asset.id, start: Math.max(0, start), duration: asset.duration }))
+    t.clips.push(clipForAsset(asset, start, p.bpm))
   })
 }
 
 /** Creates a new track (named after the asset) holding the asset as one clip. */
 export function addTrackWithClip(asset: AssetMeta, start: number): Id {
   const track = createTrack(asset.name)
-  track.clips.push(createClip({ name: asset.name, assetId: asset.id, start: Math.max(0, start), duration: asset.duration }))
+  track.clips.push(clipForAsset(asset, start, useProjectStore.getState().project.bpm))
   update('Import audio', (p) => {
     p.assets[asset.id] = asset
     p.tracks.push(track)
@@ -411,6 +435,28 @@ export function setSamplerSample(trackId: Id, asset: AssetMeta, root = 60) {
     p.assets[asset.id] = asset
     t.instrument.type = 'sampler'
     t.instrument.sample = { assetId: asset.id, root }
+  })
+}
+
+/**
+ * Sets the tempo an audio clip was made at, which syncs it to the project tempo (null stops
+ * syncing). The clip keeps the same stretch of audio, so its length on the timeline changes.
+ */
+export function setClipSourceBpm(clipId: Id, sourceBpm: number | null) {
+  if (sourceBpm !== null && !(sourceBpm >= MIN_SOURCE_BPM && sourceBpm <= MAX_SOURCE_BPM)) return
+  update(sourceBpm ? 'Sync clip to tempo' : 'Stop syncing clip', (p) => {
+    for (const t of p.tracks) {
+      const clip = t.clips.find((c) => c.id === clipId)
+      if (!clip || isMidiClip(clip)) continue
+      const before = clipRate(clip, p.bpm)
+      const after = sourceBpm ? p.bpm / sourceBpm : 1
+      const k = before / after
+      clip.duration *= k
+      clip.fadeIn *= k
+      clip.fadeOut *= k
+      if (sourceBpm) clip.sourceBpm = sourceBpm
+      else delete clip.sourceBpm
+    }
   })
 }
 

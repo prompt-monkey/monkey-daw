@@ -11,6 +11,7 @@ import { playheadPosition, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
 import { toast } from '../ui/toast'
+import { ClipMenu, type ClipMenuState } from './ClipMenu'
 import { ClipView, type ClipHandle } from './ClipView'
 import { LaneView } from '../automation/LaneView'
 import { LiveTake } from './LiveTake'
@@ -126,9 +127,10 @@ interface LaneProps {
   gestureContext: () => GestureContext | null
   /** Automation lane drawn over the clips, if the track is in automation view. */
   laneTarget?: string
+  onClipMenu: (e: React.MouseEvent, clip: Clip, trackId: string) => void
 }
 
-function Lane({ track, index, width, height, grid, pps, selection, gestureContext, laneTarget }: LaneProps) {
+function Lane({ track, index, width, height, grid, pps, selection, gestureContext, laneTarget, onClipMenu }: LaneProps) {
   const color = trackColor(index)
   const onClipDown = useCallback(
     (e: React.PointerEvent, clip: Clip, handle: ClipHandle) => {
@@ -145,6 +147,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
     (clip: Clip) => isMidiClip(clip) && useViewStore.getState().openPianoRoll(track.id, clip.id),
     [track.id],
   )
+  const onMenu = useCallback((e: React.MouseEvent, clip: Clip) => onClipMenu(e, clip, track.id), [onClipMenu, track.id])
   // Double-clicking empty space on a MIDI or drum track adds a one-bar clip there and opens it.
   const onDoubleClick = (e: React.MouseEvent) => {
     if (track.kind === 'audio' || e.target !== e.currentTarget) return
@@ -180,6 +183,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
           onPointerDown={onClipDown}
           onResetGain={onResetGain}
           onOpen={onOpen}
+          onMenu={onMenu}
           noteRows={track.kit?.pads.map((p) => p.note)}
         />
       ))}
@@ -220,6 +224,13 @@ export function Timeline() {
     (): GestureContext | null => (lanesRef.current ? { pps, rowHeight, lanes: lanesRef.current } : null),
     [pps, rowHeight],
   )
+  const [clipMenu, setClipMenu] = useState<ClipMenuState | null>(null)
+  const onClipMenu = useCallback((e: React.MouseEvent, clip: Clip, trackId: string) => {
+    // Right-clicking a clip outside the selection selects it, like a click would.
+    const view = useViewStore.getState()
+    if (!view.selection.includes(clip.id)) view.setSelection([clip.id])
+    setClipMenu({ clip, trackId, x: e.clientX, y: e.clientY })
+  }, [])
   const onGripDown = useCallback(
     (e: React.PointerEvent, trackId: string) => {
       const ctx = gestureContext()
@@ -343,6 +354,7 @@ export function Timeline() {
                 selection={selection}
                 gestureContext={gestureContext}
                 laneTarget={automationView[track.id]}
+                onClipMenu={onClipMenu}
               />
             </div>
           ))}
@@ -397,6 +409,7 @@ export function Timeline() {
           style={{ left: HEADER_WIDTH, top: RULER_HEIGHT, transform: `translateX(${playheadPosition() * pps}px)` }}
         />
       </div>
+      <ClipMenu menu={clipMenu} onClose={() => setClipMenu(null)} />
     </div>
   )
 }

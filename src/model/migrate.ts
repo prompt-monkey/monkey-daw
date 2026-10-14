@@ -6,6 +6,7 @@ import { DRUM_VOICES, PADS, createKit, presetName } from '../drums/kits'
 import { createProject } from './factory'
 import { resolveTarget } from '../automation/targets'
 import { MAX_PITCH, MIN_NOTE_LENGTH, sortNotes } from './midi'
+import { MAX_SOURCE_BPM, MIN_SOURCE_BPM } from './tempo'
 import { clipFitsTrack, isMidiClip, type AudioClip, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
 
 export class InvalidProjectError extends Error {}
@@ -71,15 +72,18 @@ function normalizeKit(raw: unknown): DrumKit {
   return { preset: typeof r.preset === 'string' && presetName(r.preset) !== 'Custom' ? r.preset : 'custom', pads }
 }
 
+const validBpm = (v: unknown): v is number => typeof v === 'number' && v >= MIN_SOURCE_BPM && v <= MAX_SOURCE_BPM
+
 function normalizeClip(raw: Loose<Clip>): Clip | null {
   const notes = (raw as Loose<MidiClip>).notes
   const assetId = (raw as Loose<AudioClip>).assetId
+  const sourceBpm = (raw as Loose<AudioClip>).sourceBpm
   if (typeof raw.id !== 'string' || (typeof assetId !== 'string' && !Array.isArray(notes))) return null
   const duration = num(raw.duration, 0)
   if (duration <= 0) return null
   const content = Array.isArray(notes)
     ? { notes: sortNotes(notes.map((n) => normalizeNote(n as Loose<Note>)).filter((n) => n !== null)) }
-    : { assetId: assetId as string }
+    : { assetId: assetId as string, ...(validBpm(sourceBpm) ? { sourceBpm } : {}) }
   return {
     id: raw.id,
     name: str(raw.name, 'Clip'),
@@ -179,6 +183,7 @@ export function normalizeProject(input: unknown): Project {
     bpm: num(raw.bpm, defaults.bpm),
     timeSignature: { beats: num(ts.beats, 4), unit: num(ts.unit, 4) },
     snap: raw.snap === 'off' || raw.snap === 'bar' ? raw.snap : 'beat',
+    syncMode: raw.syncMode === 'resample' ? 'resample' : 'stretch',
     loop: { enabled: bool(loop.enabled), start: num(loop.start, 0), end: num(loop.end, 8) },
     master: { volume: num(master.volume, 1), muted: bool(master.muted), effects: effects(master.effects), fxBypass: bool(master.fxBypass) },
     tracks: raw.tracks.map((t) => normalizeTrack(t as Loose<Track>, busIds)).filter((t) => t !== null),

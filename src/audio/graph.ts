@@ -222,8 +222,12 @@ export class MixGraph {
     return (this.tracks.get(channelId) ?? this.buses.get(channelId))?.meter.read() ?? null
   }
 
-  /** Plays a clip event with the event's timeline time mapped to `when` (AudioContext time). */
-  playClip(event: ClipEvent, buffer: AudioBuffer, when: number, onEnded?: () => void): Voice | null {
+  /**
+   * Plays a clip event with the event's timeline time mapped to `when` (AudioContext time). A
+   * synced clip plays its audio faster or slower: from `buffer` at the event's rate (the pitch
+   * follows), or from a buffer already time-stretched by that rate (`stretched`).
+   */
+  playClip(event: ClipEvent, buffer: AudioBuffer, when: number, onEnded?: () => void, stretched = false): Voice | null {
     const strip = this.tracks.get(event.trackId)
     if (!strip) return null
     const ev = trimEventStart(event, this.ctx.currentTime - when)
@@ -237,7 +241,12 @@ export class MixGraph {
     gain.gain.setValueAtTime(first.value, start + first.time)
     for (const p of rest) gain.gain.linearRampToValueAtTime(p.value, start + p.time)
     source.connect(gain).connect(strip.input)
-    source.start(start, ev.assetOffset, ev.duration)
+    if (stretched) {
+      source.start(start, ev.assetOffset / ev.rate, ev.duration)
+    } else {
+      source.playbackRate.value = ev.rate
+      source.start(start, ev.assetOffset, ev.duration * ev.rate)
+    }
 
     const cleanup = () => {
       source.disconnect()

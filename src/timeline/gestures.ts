@@ -3,7 +3,7 @@
 // working when the clip re-renders in another lane. Escape cancels a gesture.
 
 import { snapTime } from '../model/grid'
-import type { Clip, Project } from '../model/types'
+import { isMidiClip, type Clip, type Project } from '../model/types'
 import { applyClipEdits, moveTrack } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { seek } from '../state/transport'
@@ -109,10 +109,12 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
 
   const project = useProjectStore.getState().project
   const trackIds = project.tracks.map((t) => t.id)
+  const trackKinds = project.tracks.map((t) => t.kind)
   const group = placements(project, handle === 'body' ? useViewStore.getState().selection : [clip.id])
   const own = group.find((g) => g.clip.id === clip.id)
   if (!own) return
-  const assetDuration = project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration
+  // MIDI clips can be extended freely; audio clips end where their audio ends.
+  const assetDuration = isMidiClip(clip) ? Infinity : (project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration)
   const startTrack = trackIndexAt(ctx, e.clientY)
   const x0 = e.clientX
   const y0 = e.clientY
@@ -126,7 +128,7 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
       const only = (fields: Partial<Clip>): ClipPreview => ({ [clip.id]: { trackId: trackIds[own.trackIndex], fields } })
       switch (handle) {
         case 'body':
-          preview = moveClips(group, clip, dt, trackIndexAt(ctx, ev.clientY) - startTrack, trackIds, snap)
+          preview = moveClips(group, clip, dt, trackIndexAt(ctx, ev.clientY) - startTrack, trackIds, snap, trackKinds)
           break
         case 'trim-start':
           preview = only(trimStart(clip, snap(clip.start + dt)))

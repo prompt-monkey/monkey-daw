@@ -1,12 +1,13 @@
 // Pure scheduling logic shared by live playback and offline rendering: which clips sound in a
 // window of timeline time, and with what gain envelope. No Web Audio calls in this file.
 
-import type { Clip, Id, LoopRegion, Project, Track } from '../model/types'
+import { beatSeconds } from '../model/midi'
+import { isMidiClip, type AudioClip, type Clip, type Id, type LoopRegion, type Project, type Track } from '../model/types'
 
-/** One clip (or the remaining part of one) to be played as a single voice. */
+/** One audio clip (or the remaining part of one) to be played as a single voice. */
 export interface ClipEvent {
   trackId: Id
-  clip: Clip
+  clip: AudioClip
   /** Timeline time where the voice starts. */
   at: number
   /** Seconds into the clip where the voice starts (> 0 when joining a clip mid-way). */
@@ -40,6 +41,7 @@ export function clipEvents(project: Project, w: ScheduleWindow): ClipEvent[] {
   const cutAt = w.cutAt ?? Infinity
   for (const track of project.tracks) {
     for (const clip of track.clips) {
+      if (isMidiClip(clip)) continue
       const clipEnd = clip.start + clip.duration
       if (clip.start >= w.to || clipEnd <= w.from + EPSILON) continue
       let at = clip.start
@@ -54,6 +56,80 @@ export function clipEvents(project: Project, w: ScheduleWindow): ClipEvent[] {
     }
   }
   return events
+}
+
+/** One note to be played by a track's instrument. */
+export interface NoteEvent {
+  trackId: Id
+  clipId: Id
+  pitch: number
+  /** Note velocity times the clip's gain and fades at the note start. */
+  velocity: number
+  /** Timeline time where the note starts sounding. */
+  at: number
+  /** How long the note is held, before the instrument's release. */
+  duration: number
+  /** With glide on: the pitch to slide from (the note this one follows legato). */
+  glideFrom: number | null
+}
+
+/**
+ * Notes of MIDI clips that start in the window (and, with catchUp, notes already held at its
+ * start). Notes are cut at the clip edges and at `cutAt`. With glide on, an instrument plays one
+ * note at a time: each note ends where the next begins, and slides from a note it overlaps.
+ */
+export function noteEvents(project: Project, w: ScheduleWindow): NoteEvent[] {
+  const events: NoteEvent[] = []
+  const cutAt = w.cutAt ?? Infinity
+  const spb = beatSeconds(project.bpm)
+  for (const track of project.tracks) {
+    if (track.kind !== 'midi' || !track.instrument) continue
+    const mono = track.instrument.glide > 0
+    for (const clip of track.clips) {
+      if (!isMidiClip(clip)) continue
+      const clipEnd = Math.min(clip.start + clip.duration, cutAt)
+      if (clip.start >= w.to || clipEnd <= w.from + EPSILON) continue
+      const origin = clip.start - clip.offset
+      const notes = clip.notes
+      notes.forEach((note, i) => {
+        let endBeat = note.start + note.length
+        let glideFrom: number | null = null
+        if (mono) {
+          const next = notes.slice(i + 1).find((n) => n.start > note.start + EPSILON)
+          if (next) endBeat = Math.min(endBeat, next.start)
+          const prev = notes.slice(0, i).findLast((n) => n.start < note.start - EPSILON)
+          if (prev && prev.start + prev.length >= note.start - EPSILON) glideFrom = prev.pitch
+        }
+        const noteStart = Math.max(origin + note.start * spb, clip.start)
+        const noteEnd = Math.min(origin + endBeat * spb, clipEnd)
+        if (noteEnd - noteStart <= EPSILON) return
+        let at = noteStart
+        if (noteStart < w.from || noteStart >= w.to) {
+          if (!w.catchUp || noteStart >= w.from || noteEnd <= w.from + EPSILON) return
+          at = w.from
+        }
+        // A note clipped by the clip's start (trimmed head) is joined, like a catch-up.
+        const velocity = note.velocity * clipGainAt(clip, noteStart - clip.start)
+        events.push({ trackId: track.id, clipId: clip.id, pitch: note.pitch, velocity, at, duration: noteEnd - at, glideFrom })
+      })
+    }
+  }
+  return events
+}
+
+/**
+ * The project as heard in pattern mode: only one clip plays, looping over its own length. The
+ * clip is looked up on every track (it may have moved). Null when it no longer exists.
+ */
+export function patternProject(project: Project, clipId: Id): Project | null {
+  const track = project.tracks.find((t) => t.clips.some((c) => c.id === clipId))
+  const clip = track?.clips.find((c) => c.id === clipId)
+  if (!track || !clip) return null
+  return {
+    ...project,
+    loop: { enabled: true, start: clip.start, end: clip.start + clip.duration },
+    tracks: project.tracks.map((t) => ({ ...t, clips: t === track ? [clip] : [] })),
+  }
 }
 
 /** Drops the first `delta` seconds of an event (used when a voice is scheduled late). */
@@ -76,7 +152,7 @@ export interface EnvelopePoint {
 }
 
 /** Clip gain with fades at a clip-local time. */
-function clipGainAt(clip: Clip, t: number): number {
+export function clipGainAt(clip: Clip, t: number): number {
   let f = 1
   if (clip.fadeIn > 0) f = Math.min(f, t / clip.fadeIn)
   if (clip.fadeOut > 0) f = Math.min(f, (clip.duration - t) / clip.fadeOut)

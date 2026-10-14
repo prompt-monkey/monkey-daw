@@ -5,7 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–3 are built. Every step has unit tests (145 in total) and was checked in Chrome.
+Phases 0–3 and the piano roll are built. Every step has unit tests (180 in total) and was checked
+in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -18,15 +19,17 @@ Phases 0–3 are built. Every step has unit tests (145 in total) and was checked
 | 2 | Recording and metronome | Done | `da81b00` |
 | 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `177f1a8`, `1588287` |
 | 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
-| 4 | Piano roll → Drums → Tempo sync | Next | |
+| 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | |
+| 4 | Drums → Tempo sync | Next | |
 | 5 | MP3/stems export, Lyrics, App shell polish | Planned | |
 | 6 | Effects batches 2 and 3 | Deferred to the end | |
 
 Known gaps in what's built (planned for later steps):
-- Timeline: reverse, pitch and stretch on clips, curved clip fades, clip rename, consolidate and
-  convert-to-audio
+- Timeline: reverse, pitch and stretch on clips, curved clip fades, consolidate and
+  convert-to-audio; clips can only be renamed in the piano roll (MIDI clips)
 - Mixer and automation: automation on buses and the master, writing automation by moving a knob
-- Sample browser: no bundled starter pack; MIDI melodies need the piano roll
+- Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
+  the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
 
 ## Development
@@ -97,6 +100,16 @@ Known gaps in what's built (planned for later steps):
 - Glissando preview
 - PAT/SONG modes
 - MIDI file import
+
+Built in phase 4. A MIDI track plays its clips with an instrument: five built-in synths (Keys,
+Pluck, Bass, Pad, Lead) or a sampler that pitches a dropped one-shot across the keys from a root
+note. Glide makes the instrument play one note at a time and slide between overlapping notes.
+Notes are stored in beats, so MIDI clips keep their place in bars and beats when the tempo
+changes. Double-click a MIDI clip (or empty space on a MIDI track) to open it in the piano roll.
+The piano roll has draw, select, erase and zoom tools (D, S, E, Z), and right-click erases with
+any tool. Shortcuts: Ctrl+A/C/X/V/D, Delete, ↑/↓ semitone, Shift+↑/↓ octave, ←/→ by one grid
+step. Alt places notes off the grid. Click or sweep the keyboard to hear the notes (glissando).
+PAT loops the open clip on its own while the piano roll is shown; SONG plays the project.
 
 ## 7. Drums
 - Pad view: drop a one-shot to assign it
@@ -209,7 +222,7 @@ A static app with no backend.
 | Project file and stems | fflate | Builds the project ZIP (and later the stems ZIP) |
 | MP3 export | lamejs (maintained fork), in a Web Worker | |
 | Time stretch / pitch shift | SoundTouch (WASM/worklet) first; Rubber Band WASM later if quality matters | The hardest DSP part, best left to a library |
-| MIDI import | @tonejs/midi | Parsing only, not the Tone.js audio engine |
+| MIDI import | Our own small Standard MIDI File reader (notes only) | No dependency needed for reading notes; each track/channel becomes a part |
 | Testing | Vitest (model, scheduler, DSP, storage with fake-indexeddb); browser checks in Chrome | The audio engine needs real-browser checks; automated Playwright tests are still to add |
 | Hosting | Any static host (GitHub Pages, Netlify, Cloudflare Pages); optional PWA for offline use | No server needed |
 

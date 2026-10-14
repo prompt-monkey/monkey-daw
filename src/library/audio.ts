@@ -94,7 +94,8 @@ export async function previewSample(id: Id) {
 // One project asset per sample per session, so placing a sample twice reuses its audio.
 const assetBySample = new Map<Id, AssetMeta>()
 
-async function assetForSample(id: Id): Promise<AssetMeta> {
+/** The project asset holding a sample's audio, imported on first use. */
+export async function assetForSample(id: Id): Promise<AssetMeta> {
   const cached = assetBySample.get(id)
   if (cached && engine.assets.has(cached.id)) return cached
   const sample = useLibraryStore.getState().samples.find((s) => s.id === id)
@@ -107,11 +108,14 @@ async function assetForSample(id: Id): Promise<AssetMeta> {
 }
 
 /**
- * Places a sample on the timeline. With a track id it goes on that track; without one it goes
- * on the first track that is free at that time, or on a new track.
+ * Places a sample on the timeline. With an audio track's id it goes on that track; without one
+ * it goes on the first audio track that is free at that time, or on a new track. A MIDI track
+ * can't hold audio, so it gets a new track.
  */
 export async function placeSample(id: Id, time: number, trackId?: Id | null) {
   const asset = await assetForSample(id)
+  const tracks = useProjectStore.getState().project.tracks
+  if (trackId && tracks.find((t) => t.id === trackId)?.kind !== 'audio') trackId = null
   if (trackId) {
     addAudioClip(trackId, asset, time)
     return
@@ -121,9 +125,7 @@ export async function placeSample(id: Id, time: number, trackId?: Id | null) {
     return
   }
   const end = time + asset.duration
-  const free = useProjectStore
-    .getState()
-    .project.tracks.find((t) => t.clips.every((c) => c.start >= end || c.start + c.duration <= time))
+  const free = tracks.find((t) => t.kind === 'audio' && t.clips.every((c) => c.start >= end || c.start + c.duration <= time))
   if (free) addAudioClip(free.id, asset, time)
   else addTrackWithClip(asset, time)
 }

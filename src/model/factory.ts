@@ -1,4 +1,4 @@
-import type { Bus, Clip, Id, Project, Track, TrackKind } from './types'
+import type { AudioClip, Bus, Id, Instrument, MidiClip, Project, Track, TrackKind } from './types'
 
 export function createId(prefix: string): Id {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
@@ -18,16 +18,25 @@ export function createTrack(name: string, kind: TrackKind = 'audio'): Track {
     effects: [],
     fxBypass: false,
     automation: [],
+    ...(kind === 'midi' ? { instrument: createInstrument() } : {}),
     clips: [],
   }
+}
+
+export function createInstrument(type: Instrument['type'] = 'keys'): Instrument {
+  return { type, glide: 0 }
 }
 
 export function createBus(name: string): Bus {
   return { id: createId('bus'), name, volume: 1, pan: 0, muted: false, effects: [], fxBypass: false }
 }
 
-export function createClip(fields: Pick<Clip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<Clip>): Clip {
+export function createClip(fields: Pick<AudioClip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<AudioClip>): AudioClip {
   return { id: createId('clp'), offset: 0, gain: 1, fadeIn: 0, fadeOut: 0, ...fields }
+}
+
+export function createMidiClip(fields: Pick<MidiClip, 'start' | 'duration'> & Partial<MidiClip>): MidiClip {
+  return { id: createId('clp'), name: 'MIDI clip', offset: 0, gain: 1, fadeIn: 0, fadeOut: 0, notes: [], ...fields }
 }
 
 export function createProject(name = 'Untitled project'): Project {

@@ -22,13 +22,12 @@ export interface LoopRegion {
 
 export type TrackKind = 'audio' | 'midi' | 'drums'
 
-export interface Clip {
+interface ClipBase {
   id: Id
   name: string
-  assetId: Id
   /** Timeline position where the clip begins. */
   start: number
-  /** Where playback begins inside the asset (trimmed-off head). */
+  /** Where playback begins inside the clip's content (trimmed-off head). */
   offset: number
   /** Length of the clip on the timeline. */
   duration: number
@@ -36,6 +35,48 @@ export interface Clip {
   gain: number
   fadeIn: number
   fadeOut: number
+}
+
+/** A clip playing part of an audio asset. */
+export interface AudioClip extends ClipBase {
+  assetId: Id
+}
+
+/**
+ * A note in a MIDI clip. Times are in beats (quarter notes) from the start of the clip's content
+ * (the clip start minus its offset), so notes follow the tempo.
+ */
+export interface Note {
+  id: Id
+  /** MIDI note number, 0–127 (60 is middle C). */
+  pitch: number
+  start: number
+  length: number
+  /** 0–1. */
+  velocity: number
+}
+
+/** A clip of notes, played by its track's instrument. */
+export interface MidiClip extends ClipBase {
+  notes: Note[]
+}
+
+export type Clip = AudioClip | MidiClip
+
+export const isMidiClip = (clip: Clip): clip is MidiClip => 'notes' in clip
+
+/** MIDI clips live on MIDI tracks, audio clips on audio tracks. */
+export const clipFitsTrack = (clip: Clip, track: Pick<Track, 'kind'>) => isMidiClip(clip) === (track.kind === 'midi')
+
+export type SynthPreset = 'keys' | 'pluck' | 'bass' | 'pad' | 'lead'
+
+/** What a MIDI track plays its notes with: a built-in synth, or a sample pitched across the keys. */
+export interface Instrument {
+  type: SynthPreset | 'sampler'
+  /** Sampler only: the audio asset, and the note at which it plays at its original pitch. */
+  sample?: { assetId: Id; root: number }
+  /** Portamento time in seconds; above 0 the instrument plays one note at a time and slides. */
+  glide: number
 }
 
 export interface Track {
@@ -58,6 +99,8 @@ export interface Track {
   fxBypass: boolean
   /** Automation lanes, at most one per target. */
   automation: AutomationLane[]
+  /** MIDI tracks only. */
+  instrument?: Instrument
   clips: Clip[]
 }
 

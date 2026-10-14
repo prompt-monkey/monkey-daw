@@ -19,7 +19,7 @@ describe('project file', () => {
     const file = await buildProjectFile(p, (id) => (id === 'a1' ? new Blob(['RIFF-data'], { type: 'audio/wav' }) : undefined))
     const { project: read, audio } = await readProjectFile(file)
     expect(read.name).toBe('Corrido')
-    expect(read.tracks[0].clips[0].assetId).toBe('a1')
+    expect(read.tracks[0].clips[0]).toMatchObject({ assetId: 'a1' })
     expect(Object.keys(read.assets)).toEqual(['a1'])
     expect(await audio.get('a1')!.text()).toBe('RIFF-data')
     expect(audio.get('a1')!.type).toBe('audio/wav')

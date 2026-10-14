@@ -13,8 +13,9 @@
 import { EffectChain } from '../effects/chain'
 import { sampleRange, valueAt } from '../automation/curve'
 import { parseTarget, resolveTarget } from '../automation/targets'
-import type { AutomationPoint, Id, Project, Send, Track } from '../model/types'
-import { gainEnvelope, trackIsAudible, trimEventStart, type ClipEvent } from './schedule'
+import type { AutomationPoint, Id, Instrument, Project, Send, Track } from '../model/types'
+import { playInstrumentNote, type NoteToPlay } from './instruments'
+import { gainEnvelope, trackIsAudible, trimEventStart, type ClipEvent, type NoteEvent } from './schedule'
 
 export interface Voice {
   stop: () => void
@@ -255,6 +256,32 @@ export class MixGraph {
         cleanup()
       },
     }
+  }
+
+  /**
+   * Plays a note on a track's instrument at `when` (AudioContext time). A note scheduled late
+   * starts late and is shortened by the same amount.
+   */
+  playNote(
+    trackId: Id,
+    instrument: Instrument,
+    note: NoteToPlay,
+    when: number,
+    sample?: AudioBuffer,
+    onEnded?: () => void,
+  ): Voice | null {
+    const strip = this.tracks.get(trackId)
+    if (!strip) return null
+    const late = Math.max(0, this.ctx.currentTime - when)
+    if (late >= note.duration) return null
+    const voice = playInstrumentNote(this.ctx, strip.input, instrument, { ...note, duration: note.duration - late }, when + late, sample)
+    voice.onEnded = onEnded
+    return voice
+  }
+
+  /** Plays a note event from the scheduler; the event's timeline time is mapped to `when`. */
+  playNoteEvent(ev: NoteEvent, instrument: Instrument, when: number, sample?: AudioBuffer, onEnded?: () => void): Voice | null {
+    return this.playNote(ev.trackId, instrument, ev, when, sample, onEnded)
   }
 
   dispose() {

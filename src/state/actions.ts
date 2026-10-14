@@ -2,27 +2,35 @@
 // directly, so every change gets an undo label and gestures coalesce consistently.
 
 import { current } from 'immer'
-import { createBus, createClip, createId, createTrack } from '../model/factory'
+import { createBus, createClip, createId, createMidiClip, createTrack } from '../model/factory'
+import { secondsPerBar } from '../model/grid'
+import { beatSeconds, notesEnd, sortNotes } from '../model/midi'
 import { MAX_GAIN } from '../model/levels'
 import { EFFECTS, createEffect, findParam, normalizeParam } from '../effects/definitions'
 import { insertPoint } from '../automation/curve'
 import { resolveTarget } from '../automation/targets'
-import type {
-  AssetMeta,
-  AutomationLane,
-  AutomationPoint,
-  AutomationTarget,
-  Bus,
-  Clip,
-  Effect,
-  EffectParams,
-  EffectType,
-  Id,
-  OutputTarget,
-  Project,
-  SnapMode,
-  TimeSignature,
-  Track,
+import {
+  clipFitsTrack,
+  isMidiClip,
+  type AssetMeta,
+  type AutomationLane,
+  type AutomationPoint,
+  type AutomationTarget,
+  type Bus,
+  type Clip,
+  type Effect,
+  type EffectParams,
+  type EffectType,
+  type Id,
+  type Instrument,
+  type MidiClip,
+  type Note,
+  type OutputTarget,
+  type Project,
+  type SnapMode,
+  type TimeSignature,
+  type Track,
+  type TrackKind,
 } from '../model/types'
 import { useProjectStore } from './projectStore'
 import type { ClipboardItem } from './viewStore'
@@ -41,11 +49,14 @@ function findChannel(p: Project, channelId: Id): Track | Bus | undefined {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 
-export function addTrack(index?: number) {
-  update('Add track', (p) => {
-    const track = createTrack(`Track ${p.tracks.length + 1}`)
+/** Adds a track (at the end by default) and returns its id. */
+export function addTrack(index?: number, kind: TrackKind = 'audio'): Id {
+  const n = useProjectStore.getState().project.tracks.length + 1
+  const track = createTrack(kind === 'midi' ? `MIDI ${n}` : `Track ${n}`, kind)
+  update(kind === 'midi' ? 'Add MIDI track' : 'Add track', (p) => {
     p.tracks.splice(index ?? p.tracks.length, 0, track)
   })
+  return track.id
 }
 
 export function removeTrack(trackId: Id) {
@@ -188,8 +199,31 @@ export function renameProject(name: string) {
   if (trimmed) update('Rename project', (p) => void (p.name = trimmed))
 }
 
+/**
+ * Changes the tempo. MIDI clips keep their place in bars and beats: their position, length and
+ * fades scale with the tempo, so their notes stay on the grid. Audio clips stay where they are.
+ */
 export function setBpm(bpm: number) {
-  update('Change tempo', (p) => void (p.bpm = clamp(Math.round(bpm * 100) / 100, 20, 300)), 'bpm')
+  update(
+    'Change tempo',
+    (p) => {
+      const next = clamp(Math.round(bpm * 100) / 100, 20, 300)
+      const ratio = p.bpm / next
+      p.bpm = next
+      if (ratio === 1) return
+      for (const t of p.tracks) {
+        for (const c of t.clips) {
+          if (!isMidiClip(c)) continue
+          c.start *= ratio
+          c.offset *= ratio
+          c.duration *= ratio
+          c.fadeIn *= ratio
+          c.fadeOut *= ratio
+        }
+      }
+    },
+    'bpm',
+  )
 }
 
 export function setTimeSignature(timeSignature: TimeSignature) {
@@ -208,11 +242,11 @@ export function setLoop(loop: Partial<Project['loop']>) {
   })
 }
 
-/** Registers an audio asset and places it as a clip on a track. */
+/** Registers an audio asset and places it as a clip on an audio track. */
 export function addAudioClip(trackId: Id, asset: AssetMeta, start: number, label = 'Add clip') {
   update(label, (p) => {
     const t = findTrack(p, trackId)
-    if (!t) return
+    if (!t || t.kind !== 'audio') return
     p.assets[asset.id] = asset
     t.clips.push(createClip({ name: asset.name, assetId: asset.id, start: Math.max(0, start), duration: asset.duration }))
   })
@@ -271,7 +305,11 @@ export function pasteClips(items: ClipboardItem[], at: number, label = 'Paste'):
     clip: { ...i.clip, id: createId('clp'), start: Math.max(0, at + i.clip.start - earliest) },
   }))
   update(label, (p) => {
-    for (const { trackId, clip } of copies) (findTrack(p, trackId) ?? p.tracks[0])?.clips.push(clip)
+    for (const { trackId, clip } of copies) {
+      const own = findTrack(p, trackId)
+      const target = own && clipFitsTrack(clip, own) ? own : p.tracks.find((t) => clipFitsTrack(clip, t))
+      target?.clips.push(clip)
+    }
   })
   return copies.map((c) => c.clip.id)
 }
@@ -295,6 +333,106 @@ export function duplicateClips(clipIds: Id[]): Id[] {
   const start = Math.min(...items.map((i) => i.clip.start))
   const end = Math.max(...items.map((i) => i.clip.start + i.clip.duration))
   return pasteClips(items, start + (end - start), items.length > 1 ? 'Duplicate clips' : 'Duplicate clip')
+}
+
+// --- MIDI ----------------------------------------------------------------------------------
+
+function findMidiClip(p: Project, clipId: Id): { track: Track; clip: MidiClip } | undefined {
+  for (const track of p.tracks) {
+    const clip = track.clips.find((c) => c.id === clipId)
+    if (clip && isMidiClip(clip)) return { track, clip }
+  }
+  return undefined
+}
+
+/** Adds an empty MIDI clip (one bar by default) to a MIDI track. Returns its id. */
+export function addMidiClip(trackId: Id, start: number, duration?: number): Id | null {
+  const { project } = useProjectStore.getState()
+  const track = findTrack(project, trackId)
+  if (track?.kind !== 'midi') return null
+  const clip = createMidiClip({
+    name: track.name,
+    start: Math.max(0, start),
+    duration: duration ?? secondsPerBar(project.bpm, project.timeSignature),
+  })
+  update('Add MIDI clip', (p) => void findTrack(p, trackId)?.clips.push(clip))
+  return clip.id
+}
+
+/**
+ * Replaces a MIDI clip's notes (kept sorted). If notes reach past the clip's end, the clip grows
+ * to the next bar line. Pass a coalesce key so a drag is one undo step (end it with endGesture).
+ */
+export function setClipNotes(clipId: Id, notes: Note[], label: string, coalesceKey?: string) {
+  update(
+    label,
+    (p) => {
+      const found = findMidiClip(p, clipId)
+      if (!found) return
+      const { clip } = found
+      clip.notes = sortNotes(notes)
+      const spb = beatSeconds(p.bpm)
+      const needed = notesEnd(clip.notes) * spb - clip.offset
+      if (needed > clip.duration + 1e-6) {
+        const bar = secondsPerBar(p.bpm, p.timeSignature)
+        const contentStart = clip.start - clip.offset
+        // Round the new clip end up to a bar line of the timeline.
+        const end = Math.ceil((contentStart + notesEnd(clip.notes) * spb) / bar - 1e-6) * bar
+        clip.duration = Math.max(clip.duration, end - clip.start)
+      }
+    },
+    coalesceKey,
+  )
+}
+
+export function setInstrument(trackId: Id, changes: Partial<Instrument>, label = 'Change instrument') {
+  update(
+    label,
+    (p) => {
+      const t = findTrack(p, trackId)
+      if (!t?.instrument) return
+      Object.assign(t.instrument, changes)
+      if (t.instrument.type === 'sampler' && !t.instrument.sample) t.instrument.type = 'keys'
+    },
+    'glide' in changes ? `glide:${trackId}` : undefined,
+  )
+}
+
+/** Uses an audio asset as a MIDI track's sampler, played at its own pitch on `root`. */
+export function setSamplerSample(trackId: Id, asset: AssetMeta, root = 60) {
+  update('Set sampler sample', (p) => {
+    const t = findTrack(p, trackId)
+    if (!t?.instrument) return
+    p.assets[asset.id] = asset
+    t.instrument.type = 'sampler'
+    t.instrument.sample = { assetId: asset.id, root }
+  })
+}
+
+export function renameClip(clipId: Id, name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  update('Rename clip', (p) => {
+    for (const t of p.tracks) {
+      const clip = t.clips.find((c) => c.id === clipId)
+      if (clip) clip.name = trimmed
+    }
+  })
+}
+
+/** Imported MIDI parts: each becomes a MIDI track with one clip starting at `start`. */
+export function addMidiTracks(parts: { name: string; notes: Note[] }[], start: number, label = 'Import MIDI'): Id[] {
+  const { project } = useProjectStore.getState()
+  const spb = beatSeconds(project.bpm)
+  const bar = secondsPerBar(project.bpm, project.timeSignature)
+  const tracks = parts.map((part) => {
+    const track = createTrack(part.name, 'midi')
+    const length = Math.max(bar, Math.ceil((notesEnd(part.notes) * spb) / bar - 1e-6) * bar)
+    track.clips.push(createMidiClip({ name: part.name, start: Math.max(0, start), duration: length, notes: sortNotes(part.notes) }))
+    return track
+  })
+  if (tracks.length) update(label, (p) => void p.tracks.push(...tracks))
+  return tracks.map((t) => t.id)
 }
 
 // --- Effects -------------------------------------------------------------------------------

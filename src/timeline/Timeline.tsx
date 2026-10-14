@@ -2,9 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { engine } from '../audio/engine'
 import { createTestTone } from '../dev/testTone'
 import { projectLength } from '../model/factory'
-import { snapTime } from '../model/grid'
-import type { Clip, Track } from '../model/types'
-import { addAudioClip, addTrack, addTrackWithClip, applyClipEdits } from '../state/actions'
+import { secondsPerBar, snapTime } from '../model/grid'
+import { isMidiClip, type Clip, type Track } from '../model/types'
+import { addAudioClip, addMidiClip, addTrack, addTrackWithClip, applyClipEdits } from '../state/actions'
+import { MIDI_FILE, importMidiAsTracks } from '../midi/importMidi'
 import { useProjectStore } from '../state/projectStore'
 import { playheadPosition, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -24,6 +25,11 @@ import { usePlayheadFrame } from './usePlayheadFrame'
 /** Empty space kept after the last clip, in seconds. */
 const TAIL_SECONDS = 30
 const AUDIO_FILE = /\.(wav|mp3)$/i
+
+/** Imports .mid files as new MIDI tracks, one after the other from `start`. */
+async function importMidiFiles(files: File[], start: number) {
+  for (const file of files.filter((f) => MIDI_FILE.test(f.name))) await importMidiAsTracks(file, start)
+}
 
 async function importFiles(files: File[], onAsset: (asset: Awaited<ReturnType<typeof engine.assets.importFile>>) => void) {
   for (const file of files.filter((f) => AUDIO_FILE.test(f.name))) {
@@ -58,19 +64,21 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
       className="sticky left-0 z-50 flex shrink-0 items-center gap-1 border-r border-b border-line bg-surface px-1.5"
       style={{ width: HEADER_WIDTH, height: RULER_HEIGHT }}
     >
-      <button className={btn} onClick={() => fileRef.current?.click()} title="Import WAV or MP3 files, each into a new track">
+      <button className={btn} onClick={() => fileRef.current?.click()} title="Import WAV, MP3 or MIDI files, each into a new track">
         Import
       </button>
       <input
         ref={fileRef}
         type="file"
-        accept=".wav,.mp3,audio/wav,audio/mpeg"
+        accept=".wav,.mp3,.mid,.midi,audio/wav,audio/mpeg,audio/midi"
         multiple
         hidden
         onChange={(e) => {
           const files = Array.from(e.target.files ?? [])
           e.target.value = ''
-          void importFiles(files, (asset) => addTrackWithClip(asset, useTransportStore.getState().cursor))
+          const at = useTransportStore.getState().cursor
+          void importFiles(files, (asset) => addTrackWithClip(asset, at))
+          void importMidiFiles(files, at)
         }}
       />
       {import.meta.env.DEV && (
@@ -133,6 +141,22 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
     (clip: Clip) => applyClipEdits('Reset clip gain', [{ clipId: clip.id, trackId: track.id, fields: { gain: 1 } }]),
     [track.id],
   )
+  const onOpen = useCallback(
+    (clip: Clip) => isMidiClip(clip) && useViewStore.getState().openPianoRoll(track.id, clip.id),
+    [track.id],
+  )
+  // Double-clicking empty space on a MIDI track adds a one-bar clip there and opens it.
+  const onDoubleClick = (e: React.MouseEvent) => {
+    if (track.kind !== 'midi' || e.target !== e.currentTarget) return
+    const { project } = useProjectStore.getState()
+    const bar = secondsPerBar(project.bpm, project.timeSignature)
+    const time = (e.clientX - e.currentTarget.getBoundingClientRect().left) / pps
+    const id = addMidiClip(track.id, Math.floor(Math.max(0, time) / bar) * bar)
+    if (id) {
+      useViewStore.getState().setSelection([id])
+      useViewStore.getState().openPianoRoll(track.id, id)
+    }
+  }
 
   return (
     <div
@@ -142,6 +166,8 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
         const ctx = gestureContext()
         if (ctx && e.target === e.currentTarget) startLaneGesture(e, ctx)
       }}
+      onDoubleClick={onDoubleClick}
+      title={track.kind === 'midi' && !track.clips.length ? 'Double-click to add a MIDI clip' : undefined}
     >
       {track.clips.map((clip) => (
         <ClipView
@@ -153,6 +179,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
           selected={selection.includes(clip.id)}
           onPointerDown={onClipDown}
           onResetGain={onResetGain}
+          onOpen={onOpen}
         />
       ))}
       <LiveTake trackId={track.id} pps={pps} height={height} />
@@ -258,7 +285,9 @@ export function Timeline() {
     const { project } = useProjectStore.getState()
     const time = (e.clientX - rect.left - HEADER_WIDTH) / pps
     const start = e.altKey ? Math.max(0, time) : snapTime(time, project.snap, project.bpm, project.timeSignature)
-    const target = project.tracks[Math.floor((e.clientY - rect.top) / rowHeight)]
+    const hit = project.tracks[Math.floor((e.clientY - rect.top) / rowHeight)]
+    // Audio can only go on audio tracks; dropped on a MIDI track it gets a new track.
+    const target = hit?.kind === 'audio' ? hit : undefined
     const sampleId = e.dataTransfer.getData(SAMPLE_DRAG_TYPE)
     if (sampleId) {
       placeSample(sampleId, start, target?.id ?? null).catch((err) =>
@@ -266,6 +295,7 @@ export function Timeline() {
       )
       return
     }
+    void importMidiFiles(Array.from(e.dataTransfer.files), start)
     let at = start
     void importFiles(Array.from(e.dataTransfer.files), (asset) => {
       if (target) addAudioClip(target.id, asset, at)
@@ -341,9 +371,16 @@ export function Timeline() {
           )}
         </div>
 
-        <div className="sticky left-0 p-3" style={{ width: HEADER_WIDTH }}>
+        <div className="sticky left-0 flex gap-2 p-3" style={{ width: HEADER_WIDTH }}>
           <button onClick={() => addTrack()} className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2">
-            + Add track
+            + Audio track
+          </button>
+          <button
+            onClick={() => addTrack(undefined, 'midi')}
+            className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2"
+            title="A track that plays notes with an instrument"
+          >
+            + MIDI track
           </button>
         </div>
 

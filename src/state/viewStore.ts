@@ -35,7 +35,11 @@ interface ViewStore {
   projectsOpen: boolean
   libraryOpen: boolean
   /** What the bottom panel shows. */
-  bottomPanel: 'mixer' | 'effects'
+  bottomPanel: BottomPanelView
+  /** The MIDI clip open in the piano roll. */
+  pianoRoll: { trackId: Id; clipId: Id } | null
+  /** PAT: while the piano roll is shown, play only its clip, looping. SONG: play the project. */
+  patternMode: boolean
   /** Channel whose effect chain the rack shows. */
   rackChannel: Id | 'master'
   /** Per track, the automation lane drawn over its clips (absent: clips view). */
@@ -52,12 +56,17 @@ interface ViewStore {
   setMixerOpen: (open: boolean) => void
   setProjectsOpen: (open: boolean) => void
   setLibraryOpen: (open: boolean) => void
-  setBottomPanel: (panel: 'mixer' | 'effects') => void
+  setBottomPanel: (panel: BottomPanelView) => void
+  /** Opens a MIDI clip in the piano roll. */
+  openPianoRoll: (trackId: Id, clipId: Id) => void
+  setPatternMode: (on: boolean) => void
   /** Shows a channel's effects in the bottom panel. */
   openRack: (channel: Id | 'master') => void
   /** Shows a lane over a track's clips, or the clips again with null. */
   setAutomationView: (trackId: Id, target: string | null) => void
 }
+
+export type BottomPanelView = 'mixer' | 'effects' | 'pianoRoll'
 
 export const useViewStore = create<ViewStore>()((set) => ({
   pps: DEFAULT_PPS,
@@ -72,6 +81,8 @@ export const useViewStore = create<ViewStore>()((set) => ({
   projectsOpen: false,
   libraryOpen: true,
   bottomPanel: 'mixer',
+  pianoRoll: null,
+  patternMode: true,
   rackChannel: 'master',
   automationView: {},
   setPps: (pps) => set({ pps: clampPps(pps) }),
@@ -88,6 +99,8 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
   setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel }),
+  openPianoRoll: (trackId, clipId) => set({ pianoRoll: { trackId, clipId }, bottomPanel: 'pianoRoll', mixerOpen: true }),
+  setPatternMode: (patternMode) => set({ patternMode }),
   openRack: (rackChannel) => set({ rackChannel, bottomPanel: 'effects', mixerOpen: true }),
   setAutomationView: (trackId, target) =>
     set((s) => {

@@ -2,7 +2,11 @@ import { memo } from 'react'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
 import type { Track } from '../model/types'
 import { LevelMeter } from '../mixer/LevelMeter'
+import { INSTRUMENT_LABELS } from '../audio/instruments'
+import { secondsPerBar } from '../model/grid'
+import { useTransportStore } from '../state/transport'
 import {
+  addMidiClip,
   addTrack,
   duplicateTrack,
   removeAutomationLane,
@@ -76,6 +80,28 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
     </label>
   )
 
+  /** Opens the clip under the playhead (or the first clip) in the piano roll, adding one if there is none. */
+  const editNotes = () => {
+    const view = useViewStore.getState()
+    const at = useTransportStore.getState().cursor
+    const clip = track.clips.find((c) => c.start <= at && c.start + c.duration > at) ?? track.clips[0]
+    if (clip) {
+      view.openPianoRoll(track.id, clip.id)
+      return
+    }
+    const { project } = useProjectStore.getState()
+    const bar = secondsPerBar(project.bpm, project.timeSignature)
+    const id = addMidiClip(track.id, Math.floor(at / bar) * bar)
+    if (id) view.openPianoRoll(track.id, id)
+  }
+
+  const newClipAtPlayhead = () => {
+    const { project } = useProjectStore.getState()
+    const bar = secondsPerBar(project.bpm, project.timeSignature)
+    const id = addMidiClip(track.id, Math.floor(useTransportStore.getState().cursor / bar) * bar)
+    if (id) useViewStore.getState().openPianoRoll(track.id, id)
+  }
+
   const showAutomation = () => {
     const withPoints = track.automation.find((l) => l.points.length > 0)
     setAutomationView(track.id, withPoints?.target ?? 'volume')
@@ -132,14 +158,24 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             aria-label="Track name"
             className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-semibold hover:bg-surface-2 focus:bg-bg"
           />
-          <button
-            onClick={() => void toggleArm(track.id)}
-            className={`${small} ${armed ? 'border-danger bg-danger text-white' : 'text-danger'}`}
-            aria-pressed={armed}
-            title={armed ? 'Disarm (stop listening to the input)' : 'Arm this track for recording'}
-          >
-            ●
-          </button>
+          {track.instrument ? (
+            <button
+              onClick={editNotes}
+              className={`${small} max-w-16 truncate text-accent`}
+              title="Edit the notes in the piano roll"
+            >
+              ♪ {INSTRUMENT_LABELS[track.instrument.type]}
+            </button>
+          ) : (
+            <button
+              onClick={() => void toggleArm(track.id)}
+              className={`${small} ${armed ? 'border-danger bg-danger text-white' : 'text-danger'}`}
+              aria-pressed={armed}
+              title={armed ? 'Disarm (stop listening to the input)' : 'Arm this track for recording'}
+            >
+              ●
+            </button>
+          )}
           <button
             onClick={() => toggleMute(track.id)}
             className={`${small} ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
@@ -162,6 +198,13 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             items={[
               { label: 'Insert track above', onSelect: () => addTrack(index) },
               { label: 'Insert track below', onSelect: () => addTrack(index + 1) },
+              { label: 'Insert MIDI track below', onSelect: () => addTrack(index + 1, 'midi') },
+              ...(track.kind === 'midi'
+                ? [
+                    { label: 'Edit notes…', onSelect: editNotes },
+                    { label: 'New MIDI clip at playhead', onSelect: newClipAtPlayhead },
+                  ]
+                : []),
               { label: 'Effects…', onSelect: () => useViewStore.getState().openRack(track.id) },
               laneTarget
                 ? { label: 'Hide automation', onSelect: () => setAutomationView(track.id, null) }

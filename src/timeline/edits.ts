@@ -1,7 +1,7 @@
 // Pure clip-editing math used by timeline gestures. Every function returns the changed clip
 // fields; the drag controller previews them and commits them as one undoable action.
 
-import type { Clip, Id, Track } from '../model/types'
+import { clipFitsTrack, type Clip, type Id, type Track, type TrackKind } from '../model/types'
 
 /** Shortest clip a trim can produce, in seconds. */
 export const MIN_CLIP_DURATION = 0.02
@@ -24,7 +24,8 @@ export type ClipPreview = Record<Id, PreviewEntry>
 
 /**
  * Moves a group of clips together. The grabbed clip's start snaps to the grid; the others keep
- * their distance from it. Nothing moves before time 0 or off the first/last track.
+ * their distance from it. Nothing moves before time 0 or off the first/last track, and clips only
+ * change track when every clip of the group lands on a track of its kind (`trackKinds`).
  */
 export function moveClips(
   group: ClipPlacement[],
@@ -33,12 +34,14 @@ export function moveClips(
   rawTrackDelta: number,
   trackIds: Id[],
   snap: SnapFn,
+  trackKinds?: TrackKind[],
 ): ClipPreview {
   let delta = snap(grabbed.start + rawDelta) - grabbed.start
   const earliest = Math.min(...group.map((g) => g.clip.start))
   delta = Math.max(delta, -earliest)
   const indices = group.map((g) => g.trackIndex)
-  const trackDelta = Math.min(Math.max(rawTrackDelta, -Math.min(...indices)), trackIds.length - 1 - Math.max(...indices))
+  let trackDelta = Math.min(Math.max(rawTrackDelta, -Math.min(...indices)), trackIds.length - 1 - Math.max(...indices))
+  if (trackKinds && group.some((g) => !clipFitsTrack(g.clip, { kind: trackKinds[g.trackIndex + trackDelta] }))) trackDelta = 0
   const preview: ClipPreview = {}
   for (const { clip, trackIndex } of group) {
     preview[clip.id] = { trackId: trackIds[trackIndex + trackDelta], fields: { start: clip.start + delta } }

@@ -1,6 +1,7 @@
 import { EffectsRack } from '../effects/EffectsRack'
+import { PianoRoll } from '../pianoroll/PianoRoll'
 import { useProjectStore } from '../state/projectStore'
-import { useViewStore } from '../state/viewStore'
+import { useViewStore, type BottomPanelView } from '../state/viewStore'
 import { Mixer } from './Mixer'
 
 /** The panel under the timeline: the mixer, or the effect rack of one channel. */
@@ -11,7 +12,12 @@ export function BottomPanel() {
   const channelName = useProjectStore((s) =>
     channel === 'master' ? 'Master' : ([...s.project.tracks, ...s.project.buses].find((c) => c.id === channel)?.name ?? 'Master'),
   )
-  const tab = (id: 'mixer' | 'effects', label: string) => (
+  const pianoClipId = useViewStore((s) => s.pianoRoll?.clipId)
+  const clipName = useProjectStore((s) => {
+    for (const t of s.project.tracks) for (const c of t.clips) if (c.id === pianoClipId) return c.name
+    return null
+  })
+  const tab = (id: BottomPanelView, label: string) => (
     <button
       role="tab"
       aria-selected={panel === id}
@@ -22,12 +28,16 @@ export function BottomPanel() {
     </button>
   )
   return (
-    <section className="flex h-72 shrink-0 flex-col border-t border-line bg-bg" aria-label="Mixer and effects">
+    <section
+      className={`flex shrink-0 flex-col border-t border-line bg-bg ${panel === 'pianoRoll' ? 'h-[26rem]' : 'h-72'}`}
+      aria-label="Mixer, effects and piano roll"
+    >
       <div role="tablist" className="flex shrink-0 border-b border-line bg-surface px-2">
         {tab('mixer', 'Mixer')}
         {tab('effects', `Effects · ${channelName}`)}
+        {pianoClipId && tab('pianoRoll', `Piano roll${clipName ? ` · ${clipName}` : ''}`)}
       </div>
-      {panel === 'mixer' ? <Mixer /> : <EffectsRack />}
+      {panel === 'mixer' ? <Mixer /> : panel === 'effects' ? <EffectsRack /> : <PianoRoll />}
     </section>
   )
 }

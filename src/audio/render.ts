@@ -5,7 +5,7 @@ import { ensureEffectWorklets } from '../effects/nodes'
 import type { Project } from '../model/types'
 import type { AssetRegistry } from './assets'
 import { MixGraph } from './graph'
-import { clipEvents } from './schedule'
+import { clipEvents, noteEvents } from './schedule'
 
 export interface RenderRange {
   start: number
@@ -36,9 +36,14 @@ export async function renderProject(
   const mix = new MixGraph(ctx)
   mix.sync(project, true, range.start)
   mix.scheduleAutomation(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
-  for (const ev of clipEvents(project, { from: range.start, to: range.end, catchUp: true, cutAt: range.end })) {
+  const window = { from: range.start, to: range.end, catchUp: true, cutAt: range.end }
+  for (const ev of clipEvents(project, window)) {
     const buffer = assets.get(ev.clip.assetId)
     if (buffer) mix.playClip(ev, buffer, ev.at - range.start)
+  }
+  for (const ev of noteEvents(project, window)) {
+    const instrument = project.tracks.find((t) => t.id === ev.trackId)?.instrument
+    if (instrument) mix.playNoteEvent(ev, instrument, ev.at - range.start, instrument.sample && assets.get(instrument.sample.assetId))
   }
 
   if (onProgress) {

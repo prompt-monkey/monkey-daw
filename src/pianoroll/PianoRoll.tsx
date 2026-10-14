@@ -111,7 +111,7 @@ const Keyboard = memo(function Keyboard({ trackId }: { trackId: string }) {
     <div
       ref={ref}
       onPointerDown={onPointerDown}
-      className="sticky left-0 z-20 shrink-0 cursor-pointer border-r border-line select-none"
+      className="sticky left-0 z-20 shrink-0 cursor-pointer touch-none border-r border-line select-none"
       style={{ width: KEYS_W, height: GRID_H }}
       title="Click a key to hear it; drag across the keys for a glissando"
     >
@@ -682,7 +682,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
             <Keyboard trackId={track.id} />
             <div
               ref={gridRef}
-              className={`relative shrink-0 select-none ${cursor}`}
+              className={`relative shrink-0 touch-none select-none ${cursor}`}
               style={{ width: gridWidth, height: GRID_H, ...gridLines(ppb, barBeats, beatBeats, grid) }}
               onPointerDown={onGridPointerDown}
               onContextMenu={(e) => e.preventDefault()}

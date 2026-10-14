@@ -6,6 +6,7 @@ import { useProjectStore } from '../state/projectStore'
 import { saveCurrent } from '../storage/session'
 import { playheadPosition, togglePlay } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
+import { toggleFullscreen } from './shell'
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -18,7 +19,8 @@ function isTyping(target: EventTarget | null): boolean {
  * Global shortcuts:
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
  * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
- * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome
+ * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome · F fullscreen ·
+ * ? shortcuts guide
  */
 export function useShortcuts() {
   useEffect(() => {
@@ -43,6 +45,12 @@ export function useShortcuts() {
       } else if (!mod && key === 'r') {
         handled()
         toggleRecording()
+      } else if (!mod && e.key === '?') {
+        handled()
+        view.setShortcutsOpen(true)
+      } else if (!mod && key === 'f') {
+        handled()
+        void toggleFullscreen()
       } else if (!mod && key === 'k') {
         handled()
         const rec = useRecordingStore.getState()

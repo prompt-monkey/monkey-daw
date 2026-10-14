@@ -25,7 +25,7 @@ import { useViewStore } from '../state/viewStore'
 import { Menu } from '../ui/Menu'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { availableTargets } from '../automation/targets'
-import { HEADER_WIDTH } from './geometry'
+import { useHeaderWidth, useShellStore } from '../ui/shell'
 
 const formatPan = (pan: number) => (Math.abs(pan) < 0.005 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`)
 
@@ -46,6 +46,9 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
   // While automated, the sliders follow the automation and can't be dragged.
   const autoVolume = useAutomatedValue(track, 'volume')
   const autoPan = useAutomatedValue(track, 'pan')
+  // Phones: a narrower header, name and buttons on separate rows, volume and pan in the mixer.
+  const narrow = useShellStore((s) => s.narrow)
+  const headerWidth = useHeaderWidth()
   const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
 
   const slider = (
@@ -140,7 +143,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
   return (
     <div
       className="sticky left-0 z-30 flex shrink-0 border-r border-b border-line bg-surface"
-      style={{ width: HEADER_WIDTH, height, boxShadow: `inset 3px 0 0 ${color}` }}
+      style={{ width: headerWidth, height, boxShadow: `inset 3px 0 0 ${color}` }}
     >
       <div
         onPointerDown={(e) => onGripDown(e, track.id)}
@@ -150,14 +153,14 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
         ⠿
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 py-1 pr-2">
-        <div className="flex items-center gap-1">
+        <div className={`flex items-center gap-1 ${narrow ? 'flex-wrap' : ''}`}>
           <input
             defaultValue={track.name}
             key={track.name}
             onBlur={(e) => e.target.value !== track.name && renameTrack(track.id, e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             aria-label="Track name"
-            className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-semibold hover:bg-surface-2 focus:bg-bg"
+            className={`min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-semibold hover:bg-surface-2 focus:bg-bg ${narrow ? 'basis-full' : ''}`}
           />
           {track.kind !== 'audio' ? (
             <button
@@ -220,7 +223,8 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             ⋮
           </Menu>
         </div>
-        {(!compact || !laneTarget) &&
+        {!narrow &&
+          (!compact || !laneTarget) &&
           slider(
             'VOL',
             autoVolume ?? gainToFader(track.volume),
@@ -231,7 +235,8 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             gainToFader(1),
             autoVolume !== null,
           )}
-        {!compact &&
+        {!narrow &&
+          !compact &&
           !laneTarget &&
           slider(
             'PAN',

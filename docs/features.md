@@ -5,8 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–4 and the export and lyrics steps of phase 5 are built. Every step has unit tests (214 in
-total) and was checked in Chrome.
+Phases 0–5 are built. Every step has unit tests (218 in total) and was checked in Chrome. Phase 6
+(effects batches 2 and 3) is what's left.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -23,9 +23,9 @@ total) and was checked in Chrome.
 | 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `7d0ac05` |
 | 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `96f4544` |
 | 5 | Export: MP3, stems as a ZIP | Done | `dad7618` |
-| 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | |
-| 5 | App shell polish | Next | |
-| 6 | Effects batches 2 and 3 | Deferred to the end | |
+| 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | `3d54e4b` |
+| 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | |
+| 6 | Effects batches 2 and 3 | Next (deferred to the end) | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: reverse, pitch shift and free stretching of clips, curved clip fades, consolidate
@@ -34,6 +34,9 @@ Known gaps in what's built (planned for later steps):
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
+- Phones: the layout was checked at 390 px wide in desktop Chrome; touch gestures (pinch zoom, tap
+  to seek, touch drags) need a check on a real phone. The top bar wraps to several rows on phones,
+  and long-press menus depend on the browser (Chrome on Android opens them; iOS Safari doesn't)
 - Drums: no choke groups (a closed hat doesn't cut an open hat); swing comes only from the
   generator's genres; generated patterns are written for 16 steps per bar, so other time
   signatures use the first steps of each pattern
@@ -243,6 +246,17 @@ lyrics on the clipboard and .txt downloads them, as "[Verse 1]" headed sections.
 - Automatic "lite" performance mode
 - Fullscreen and mobile layout
 - Shortcuts guide (`?`)
+
+Built in phase 5. `?` (or "All shortcuts" in the footer, or the View menu) lists every keyboard
+and mouse shortcut by area. The View menu also toggles fullscreen (F) and sets lite mode: Auto,
+On or Off. Lite mode redraws the meters about 20 times a second instead of every frame, draws
+waveforms at lower resolution and keeps 0.3 s of audio scheduled instead of 0.12 s, so playback
+survives longer stalls. Auto turns it on for devices with two cores or 2 GB of memory or less, or
+when playback keeps dropping frames (a message says so). Below 768 px wide the layout changes: a
+narrower track header with volume and pan left to the mixer, the library and lyrics as drawers
+over the timeline, shorter bottom panels, fewer toolbar buttons, no footer. On touch screens two
+fingers pinch to zoom the timeline, one finger scrolls, a tap moves the playhead, and drags on
+clips, notes, steps, pads, knobs and automation edit instead of scrolling.
 
 ## Tech stack
 

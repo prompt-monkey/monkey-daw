@@ -12,7 +12,6 @@ import { PlaybackPlanner, clipEvents, noteEvents, patternProject } from './sched
 import { clipBuffer, onStretchReady, prepareStretches } from './stretch'
 
 const TICK_MS = 25
-const LOOKAHEAD = 0.12
 /** Delay before the first scheduled audio, so the first window is never late. */
 const START_DELAY = 0.03
 
@@ -49,6 +48,8 @@ export class AudioEngine {
   /** In pattern mode only this clip plays, looping over its length. */
   private pattern: Id | null = null
   private stretchTimer: ReturnType<typeof setTimeout> | null = null
+  /** Seconds of audio kept scheduled ahead of the clock (longer in lite mode). */
+  private lookahead = 0.12
 
   constructor() {
     // Clips that were resampled while their stretched audio was being made switch over to it.
@@ -126,6 +127,10 @@ export class AudioEngine {
     return position
   }
 
+  setLookahead(seconds: number) {
+    this.lookahead = seconds
+  }
+
   /** Tells the engine where the playhead rests while stopped (seek, stop). */
   setRestingPosition(time: number) {
     this.restingPosition = time
@@ -183,7 +188,7 @@ export class AudioEngine {
     const loop = this.ignoreLoop ? { ...project.loop, enabled: false } : project.loop
     const { bpm, timeSignature } = project
     const { enabled, volume, countInUntil } = this.metronome
-    for (const { window, ctxOffset } of planner.plan(ctx.currentTime + LOOKAHEAD, loop)) {
+    for (const { window, ctxOffset } of planner.plan(ctx.currentTime + this.lookahead, loop)) {
       if (enabled || countInUntil !== null) {
         for (const beat of beatsInWindow(window.from, window.to, bpm, timeSignature)) {
           if (enabled || beat.time < countInUntil!) scheduleClick(ctx, beat.time + ctxOffset, beat.accent, volume)

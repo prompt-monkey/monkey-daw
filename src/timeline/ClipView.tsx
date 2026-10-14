@@ -5,12 +5,20 @@ import { beatSeconds } from '../model/midi'
 import { clipRate } from '../model/tempo'
 import { isMidiClip, type Clip, type Note } from '../model/types'
 import { useProjectStore } from '../state/projectStore'
+import { useLite } from '../ui/shell'
 import { MAX_CLIP_GAIN, formatGain } from './edits'
 
 export type ClipHandle = 'body' | 'trim-start' | 'trim-end' | 'fade-in' | 'fade-out' | 'gain'
 
-/** Backing-store width cap; wider clips stretch the waveform image. */
+/** Backing-store width cap; wider clips stretch the waveform image. Lite mode draws less. */
 const MAX_CANVAS_WIDTH = 4096
+const LITE_CANVAS_WIDTH = 1024
+
+/** Canvas resolution: the device's pixel ratio, or 1 in lite mode. */
+function useCanvasScale(): { dpr: number; maxWidth: number } {
+  const lite = useLite()
+  return lite ? { dpr: 1, maxWidth: LITE_CANVAS_WIDTH } : { dpr: window.devicePixelRatio || 1, maxWidth: MAX_CANVAS_WIDTH }
+}
 const NAME_HEIGHT = 16
 
 interface WaveformProps {
@@ -28,12 +36,12 @@ interface WaveformProps {
 function Waveform({ assetId, offset, duration, rate, gain, width, height, color }: WaveformProps) {
   const ref = useRef<HTMLCanvasElement>(null)
   const peaks = usePeaks(assetId)
+  const { dpr, maxWidth } = useCanvasScale()
 
   useEffect(() => {
     const canvas = ref.current
     if (!canvas || width < 1 || height < 1) return
-    const dpr = window.devicePixelRatio || 1
-    const w = Math.max(1, Math.round(Math.min(width, MAX_CANVAS_WIDTH) * dpr))
+    const w = Math.max(1, Math.round(Math.min(width, maxWidth) * dpr))
     const h = Math.max(1, Math.round(height * dpr))
     canvas.width = w
     canvas.height = h
@@ -52,7 +60,7 @@ function Waveform({ assetId, offset, duration, rate, gain, width, height, color 
       const bottom = mid - Math.max(-1, lo) * scale
       g.fillRect(x, top, 1, Math.max(1, bottom - top))
     }
-  }, [peaks, offset, duration, rate, gain, width, height, color])
+  }, [peaks, offset, duration, rate, gain, width, height, color, dpr, maxWidth])
 
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" />
 }
@@ -73,12 +81,12 @@ interface MidiNotesProps {
 function MidiNotes({ notes, offset, duration, width, height, color, rows }: MidiNotesProps) {
   const ref = useRef<HTMLCanvasElement>(null)
   const spb = beatSeconds(useProjectStore((s) => s.project.bpm))
+  const { dpr, maxWidth } = useCanvasScale()
 
   useEffect(() => {
     const canvas = ref.current
     if (!canvas || width < 1 || height < 1) return
-    const dpr = window.devicePixelRatio || 1
-    const w = Math.max(1, Math.round(Math.min(width, MAX_CANVAS_WIDTH) * dpr))
+    const w = Math.max(1, Math.round(Math.min(width, maxWidth) * dpr))
     const h = Math.max(1, Math.round(height * dpr))
     canvas.width = w
     canvas.height = h
@@ -104,7 +112,7 @@ function MidiNotes({ notes, offset, duration, width, height, color, rows }: Midi
       g.globalAlpha = 0.45 + 0.55 * n.velocity
       g.fillRect(Math.max(0, x0), y, Math.max(1, Math.min(w, x1) - Math.max(0, x0) - 1), Math.max(1, row - 1))
     }
-  }, [notes, offset, duration, width, height, color, spb, rows])
+  }, [notes, offset, duration, width, height, color, spb, rows, dpr, maxWidth])
 
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" />
 }
@@ -164,7 +172,7 @@ export const ClipView = memo(function ClipView({
         e.preventDefault()
         onMenu?.(e, clip)
       }}
-      className={`group absolute top-0.5 cursor-grab overflow-hidden rounded-md border select-none ${
+      className={`group absolute top-0.5 cursor-grab touch-none overflow-hidden rounded-md border select-none ${
         selected ? 'border-text ring-1 ring-text' : 'border-black/40'
       }`}
       style={{

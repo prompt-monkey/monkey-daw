@@ -4,6 +4,7 @@ import type { MeterReading } from '../audio/graph'
 import { meterPosition } from '../model/levels'
 import type { Id } from '../model/types'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import { liteActive } from '../ui/shell'
 
 /** How fast the bar falls, in meter-travel per second. */
 const FALL_RATE = 1.6
@@ -29,11 +30,13 @@ interface Props {
 /** Stereo peak meter with falling bars and peak hold, drawn on canvas every frame. */
 export function LevelMeter({ channelId = 'master', read, orientation = 'vertical', className = '' }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const state = useRef({ level: [0, 0], hold: [0, 0], holdUntil: [0, 0], last: 0, idle: false })
+  const state = useRef({ level: [0, 0], hold: [0, 0], holdUntil: [0, 0], last: 0, idle: false, frame: 0 })
 
   usePlayheadFrame(() => {
     const canvas = ref.current
     if (!canvas) return
+    // Lite mode: redraw every third frame (about 20 per second).
+    if (liteActive() && state.current.frame++ % 3 !== 0) return
     const now = performance.now() / 1000
     const s = state.current
     const dt = s.last ? Math.min(0.1, now - s.last) : 0

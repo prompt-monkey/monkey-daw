@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { engine } from '../audio/engine'
 import { gainToDb } from '../model/levels'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import { liteActive } from '../ui/shell'
 
 /** RMS level, in dBFS, that reads 0 VU. */
 const REFERENCE_DBFS = -18
@@ -18,11 +19,13 @@ const angleFor = (vu: number) => ((Math.min(MAX_VU, Math.max(MIN_VU, vu)) - MIN_
 /** Analog-style VU meter for the master: RMS with needle ballistics. */
 export function VuMeter({ className = '' }: { className?: string }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const state = useRef({ vu: MIN_VU, last: 0, drawnAt: NaN, area: 0 })
+  const state = useRef({ vu: MIN_VU, last: 0, drawnAt: NaN, area: 0, frame: 0 })
 
   usePlayheadFrame(() => {
     const canvas = ref.current
     if (!canvas) return
+    // Lite mode: redraw every third frame (the needle math uses real elapsed time).
+    if (liteActive() && state.current.frame++ % 3 !== 0) return
     const now = performance.now() / 1000
     const s = state.current
     const dt = s.last ? Math.min(0.1, now - s.last) : 0

@@ -17,7 +17,8 @@ import { LaneView } from '../automation/LaneView'
 import { LiveTake } from './LiveTake'
 import { trackColor } from './colors'
 import { applyPreview } from './edits'
-import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHTS, clampPps, laneGridBackground } from './geometry'
+import { useHeaderWidth, useShellStore } from '../ui/shell'
+import { RULER_HEIGHT, TRACK_HEIGHTS, clampPps, laneGridBackground } from './geometry'
 import { startClipGesture, startLaneGesture, startTrackReorder, type GestureContext } from './gestures'
 import { Ruler } from './Ruler'
 import { TrackHeader } from './TrackHeader'
@@ -44,6 +45,8 @@ async function importFiles(files: File[], onAsset: (asset: Awaited<ReturnType<ty
 
 function TimelineToolbar({ onFit }: { onFit: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const headerWidth = useHeaderWidth()
+  const narrow = useShellStore((s) => s.narrow)
   const pps = useViewStore((s) => s.pps)
   const trackHeight = useViewStore((s) => s.trackHeight)
   const follow = useViewStore((s) => s.followPlayhead)
@@ -63,7 +66,7 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
   return (
     <div
       className="sticky left-0 z-50 flex shrink-0 items-center gap-1 border-r border-b border-line bg-surface px-1.5"
-      style={{ width: HEADER_WIDTH, height: RULER_HEIGHT }}
+      style={{ width: headerWidth, height: RULER_HEIGHT }}
     >
       <button className={btn} onClick={() => fileRef.current?.click()} title="Import WAV, MP3 or MIDI files, each into a new track">
         Import
@@ -82,7 +85,7 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
           void importMidiFiles(files, at)
         }}
       />
-      {import.meta.env.DEV && (
+      {import.meta.env.DEV && !narrow && (
         <button className={btn} onClick={addTone} title="Development: add a synthesized clip">
           + Tone
         </button>
@@ -94,18 +97,22 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
       <button className={btn} onClick={() => view.setPps(pps * 1.5)} title="Zoom in (Ctrl + wheel)">
         +
       </button>
-      <button className={btn} onClick={onFit} title="Fit the project in view">
-        Fit
-      </button>
+      {!narrow && (
+        <button className={btn} onClick={onFit} title="Fit the project in view">
+          Fit
+        </button>
+      )}
       <button
         className={`${btn} ${follow ? 'bg-surface-2 text-accent' : ''}`}
         onClick={() => view.setFollowPlayhead(!follow)}
         aria-pressed={follow}
         title="Follow the playhead while playing"
+        hidden={narrow}
       >
         ⇥
       </button>
       <button
+        hidden={narrow}
         className={btn}
         onClick={() => view.setTrackHeight(trackHeight === 'normal' ? 'compact' : 'normal')}
         title={trackHeight === 'normal' ? 'Compact track height' : 'Normal track height'}
@@ -204,25 +211,28 @@ export function Timeline() {
   const lanesRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
   const zoomAnchor = useRef<{ time: number; px: number } | null>(null)
+  // Read by the wheel and pinch handlers, which are attached once.
+  const headerWidthRef = useRef(0)
   const [viewportWidth, setViewportWidth] = useState(0)
 
   const project = useProjectStore((s) => s.project)
   const { pps, trackHeight, selection, preview, marquee, trackDrop, automationView } = useViewStore()
   const rowHeight = TRACK_HEIGHTS[trackHeight]
+  const headerWidth = useHeaderWidth()
   const tracks = useMemo(() => applyPreview(project.tracks, preview), [project.tracks, preview])
   const grid = useMemo(() => laneGridBackground(pps, project.bpm, project.timeSignature), [pps, project.bpm, project.timeSignature])
 
   const seconds = Math.max(
     projectLength({ ...project, tracks }) + TAIL_SECONDS,
     project.loop.end + 10,
-    (viewportWidth - HEADER_WIDTH) / pps + 1,
+    (viewportWidth - headerWidth) / pps + 1,
   )
   const laneWidth = seconds * pps
-  const contentWidth = HEADER_WIDTH + laneWidth
+  const contentWidth = headerWidth + laneWidth
 
   const gestureContext = useCallback(
-    (): GestureContext | null => (lanesRef.current ? { pps, rowHeight, lanes: lanesRef.current } : null),
-    [pps, rowHeight],
+    (): GestureContext | null => (lanesRef.current ? { pps, rowHeight, lanes: lanesRef.current, headerWidth } : null),
+    [pps, rowHeight, headerWidth],
   )
   const [clipMenu, setClipMenu] = useState<ClipMenuState | null>(null)
   const onClipMenu = useCallback((e: React.MouseEvent, clip: Clip, trackId: string) => {
@@ -240,22 +250,53 @@ export function Timeline() {
   )
 
   useEffect(() => {
+    headerWidthRef.current = headerWidth
+  }, [headerWidth])
+
+  useEffect(() => {
     if (!scroller) return
     const observer = new ResizeObserver(() => setViewportWidth(scroller.clientWidth))
     observer.observe(scroller)
+    /** Zooms by `factor`, keeping the time at `clientX` where it is. */
+    const zoomAround = (clientX: number, pps: number) => {
+      const px = clientX - scroller.getBoundingClientRect().left - headerWidthRef.current
+      const current = useViewStore.getState().pps
+      zoomAnchor.current = { time: (scroller.scrollLeft + px) / current, px }
+      useViewStore.getState().setPps(pps)
+    }
     // Ctrl/Cmd + wheel zooms around the pointer; a plain wheel scrolls as usual.
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
-      const px = e.clientX - scroller.getBoundingClientRect().left - HEADER_WIDTH
-      const current = useViewStore.getState().pps
-      zoomAnchor.current = { time: (scroller.scrollLeft + px) / current, px }
-      useViewStore.getState().setPps(current * Math.exp(-e.deltaY * 0.0015))
+      zoomAround(e.clientX, useViewStore.getState().pps * Math.exp(-e.deltaY * 0.0015))
+    }
+    // Two fingers pinch to zoom (touch screens); one finger scrolls as usual.
+    let pinch: { distance: number; pps: number } | null = null
+    const spread = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) pinch = { distance: Math.max(1, spread(e.touches)), pps: useViewStore.getState().pps }
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return
+      e.preventDefault()
+      const mid = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      zoomAround(mid, pinch.pps * (spread(e.touches) / pinch.distance))
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null
     }
     scroller.addEventListener('wheel', onWheel, { passive: false })
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchmove', onTouchMove, { passive: false })
+    scroller.addEventListener('touchend', onTouchEnd)
+    scroller.addEventListener('touchcancel', onTouchEnd)
     return () => {
       observer.disconnect()
       scroller.removeEventListener('wheel', onWheel)
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      scroller.removeEventListener('touchcancel', onTouchEnd)
     }
   }, [scroller])
 
@@ -273,7 +314,7 @@ export function Timeline() {
     if (lineRef.current) lineRef.current.style.transform = `translateX(${x}px)`
     const el = scrollerRef.current
     if (!el || !useTransportStore.getState().playing || !useViewStore.getState().followPlayhead) return
-    const visible = el.clientWidth - HEADER_WIDTH
+    const visible = el.clientWidth - headerWidth
     if (x > el.scrollLeft + visible - 24 || x < el.scrollLeft) el.scrollLeft = Math.max(0, x - 48)
   })
 
@@ -281,7 +322,7 @@ export function Timeline() {
     const el = scrollerRef.current
     if (!el) return
     const length = Math.max(projectLength(project), project.loop.enabled ? project.loop.end : 0, 8)
-    useViewStore.getState().setPps(clampPps((el.clientWidth - HEADER_WIDTH - 32) / length))
+    useViewStore.getState().setPps(clampPps((el.clientWidth - headerWidth - 32) / length))
     el.scrollLeft = 0
   }
 
@@ -295,7 +336,7 @@ export function Timeline() {
     e.preventDefault()
     const rect = lanesRef.current.getBoundingClientRect()
     const { project } = useProjectStore.getState()
-    const time = (e.clientX - rect.left - HEADER_WIDTH) / pps
+    const time = (e.clientX - rect.left - headerWidth) / pps
     const start = e.altKey ? Math.max(0, time) : snapTime(time, project.snap, project.bpm, project.timeSignature)
     const hit = project.tracks[Math.floor((e.clientY - rect.top) / rowHeight)]
     // Audio can only go on audio tracks; dropped on a MIDI track it gets a new track.
@@ -330,7 +371,7 @@ export function Timeline() {
       >
         <div className="sticky top-0 z-40 flex">
           <TimelineToolbar onFit={fit} />
-          <Ruler pps={pps} width={laneWidth} scroller={scroller} />
+          <Ruler pps={pps} width={laneWidth} scroller={scroller} headerWidth={headerWidth} />
         </div>
 
         <div ref={lanesRef} className="relative">
@@ -362,7 +403,7 @@ export function Timeline() {
           {project.loop.enabled && (
             <div
               className="pointer-events-none absolute inset-y-0 z-10 border-x border-accent/40 bg-accent/5"
-              style={{ left: HEADER_WIDTH + project.loop.start * pps, width: (project.loop.end - project.loop.start) * pps }}
+              style={{ left: headerWidth + project.loop.start * pps, width: (project.loop.end - project.loop.start) * pps }}
             />
           )}
           {trackDrop !== null && (
@@ -375,7 +416,7 @@ export function Timeline() {
             <div
               className="pointer-events-none absolute z-20 border border-accent bg-accent/10"
               style={{
-                left: HEADER_WIDTH + Math.min(marquee.t0, marquee.t1) * pps,
+                left: headerWidth + Math.min(marquee.t0, marquee.t1) * pps,
                 width: Math.abs(marquee.t1 - marquee.t0) * pps,
                 top: Math.max(0, Math.min(marquee.track0, marquee.track1)) * rowHeight,
                 height: (Math.abs(marquee.track1 - marquee.track0) + 1) * rowHeight,
@@ -384,7 +425,7 @@ export function Timeline() {
           )}
         </div>
 
-        <div className="sticky left-0 flex gap-1.5 p-3" style={{ width: HEADER_WIDTH }}>
+        <div className="sticky left-0 flex flex-wrap gap-1.5 p-3" style={{ width: headerWidth }}>
           {(
             [
               ['audio', '+ Audio', 'Add an audio track: clips, samples and recordings'],
@@ -406,7 +447,7 @@ export function Timeline() {
         <div
           ref={lineRef}
           className="pointer-events-none absolute bottom-0 z-20 w-px bg-accent"
-          style={{ left: HEADER_WIDTH, top: RULER_HEIGHT, transform: `translateX(${playheadPosition() * pps}px)` }}
+          style={{ left: headerWidth, top: RULER_HEIGHT, transform: `translateX(${playheadPosition() * pps}px)` }}
         />
       </div>
       <ClipMenu menu={clipMenu} onClose={() => setClipMenu(null)} />

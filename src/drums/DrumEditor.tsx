@@ -66,7 +66,7 @@ function PadGrid({ track, selected, onSelect }: { track: Track; selected: number
             if (sampleId) void assign(pad.note, () => assetForSample(sampleId))
             else if (file) void assign(pad.note, () => engine.assets.importFile(file, engine.context))
           }}
-          className={`flex h-11 flex-col justify-center rounded-md border px-1.5 text-left active:bg-accent/30 ${
+          className={`flex h-11 touch-none flex-col justify-center rounded-md border px-1.5 text-left active:bg-accent/30 ${
             pad.note === selected ? 'border-accent bg-accent/15' : 'border-line bg-surface-2 hover:border-text-dim'
           } ${dropTarget === pad.note ? 'ring-2 ring-accent' : ''}`}
           title={`${pad.name}: click to play, drop a one-shot here to use it`}
@@ -347,7 +347,7 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
                 >
                   {p.name}
                 </button>
-                <div className="flex" onPointerDown={onCellDown} title="Click or drag to add steps · Shift accent · Alt+click changes velocity · right-click removes">
+                <div className="flex touch-none" onPointerDown={onCellDown} title="Click or drag to add steps · Shift accent · Alt+click changes velocity · right-click removes">
                   {Array.from({ length: columns }, (_, col) => {
                     const v = cells.get(`${p.note}:${col}`)
                     const barStart = (col * step) % barBeats < 1e-6

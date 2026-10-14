@@ -1,7 +1,8 @@
 import { secondsPerBar, secondsPerBeat } from '../model/grid'
 import type { TimeSignature } from '../model/types'
 
-export const HEADER_WIDTH = 248
+/** Width of the track header column: narrower on phones. */
+export const HEADER_WIDTHS = { wide: 248, narrow: 148 } as const
 export const RULER_HEIGHT = 40
 /** Top part of the ruler where the loop region is dragged. */
 export const LOOP_STRIP_HEIGHT = 14

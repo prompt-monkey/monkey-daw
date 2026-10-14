@@ -22,7 +22,6 @@ import {
   type ClipPlacement,
   type ClipPreview,
 } from './edits'
-import { HEADER_WIDTH } from './geometry'
 
 const DRAG_THRESHOLD = 3
 
@@ -31,10 +30,12 @@ export interface GestureContext {
   rowHeight: number
   /** Element wrapping all track rows; its left edge is the content's left edge. */
   lanes: HTMLElement
+  /** Width of the track header column, left of the lanes. */
+  headerWidth: number
 }
 
 function timeAt(ctx: GestureContext, clientX: number): number {
-  return (clientX - ctx.lanes.getBoundingClientRect().left - HEADER_WIDTH) / ctx.pps
+  return (clientX - ctx.lanes.getBoundingClientRect().left - ctx.headerWidth) / ctx.pps
 }
 
 function trackIndexAt(ctx: GestureContext, clientY: number): number {
@@ -188,6 +189,25 @@ export function startTrackReorder(e: React.PointerEvent, trackId: string, ctx: G
 /** Drag on empty lane space: rubber-band selection. A plain click deselects and moves the cursor. */
 export function startLaneGesture(e: React.PointerEvent, ctx: GestureContext) {
   if (e.button !== 0) return
+  if (e.pointerType === 'touch') {
+    // The browser scrolls on a drag (and cancels the pointer); a tap moves the playhead.
+    const t = timeAt(ctx, e.clientX)
+    const tap = (ev: PointerEvent) => {
+      window.removeEventListener('pointerup', tap)
+      window.removeEventListener('pointercancel', cancel)
+      if (Math.abs(ev.clientX - e.clientX) < 8 && Math.abs(ev.clientY - e.clientY) < 8) {
+        useViewStore.getState().setSelection([])
+        seek(snapper(useProjectStore.getState().project, false)(t))
+      }
+    }
+    const cancel = () => {
+      window.removeEventListener('pointerup', tap)
+      window.removeEventListener('pointercancel', cancel)
+    }
+    window.addEventListener('pointerup', tap)
+    window.addEventListener('pointercancel', cancel)
+    return
+  }
   const additive = e.shiftKey || e.ctrlKey || e.metaKey
   const initial = additive ? useViewStore.getState().selection : []
   const t0 = timeAt(ctx, e.clientX)

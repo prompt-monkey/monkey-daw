@@ -8,7 +8,7 @@ import type { LoopRegion } from '../model/types'
 import { setLoop } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { seek, useTransportStore } from '../state/transport'
-import { HEADER_WIDTH, LOOP_STRIP_HEIGHT, RULER_HEIGHT, rulerTicks } from './geometry'
+import { LOOP_STRIP_HEIGHT, RULER_HEIGHT, rulerTicks } from './geometry'
 import { usePlayheadFrame } from './usePlayheadFrame'
 
 const EDGE_GRAB_PX = 6
@@ -19,6 +19,8 @@ interface Props {
   width: number
   /** The timeline's scroll container; the ruler redraws for its visible span. */
   scroller: HTMLElement | null
+  /** Width of the track header column, left of the ruler. */
+  headerWidth: number
 }
 
 /** Scroll offset and width of the scroll container, updated on scroll and resize. */
@@ -39,7 +41,7 @@ function useScrollBox(scroller: HTMLElement | null) {
   return box
 }
 
-export function Ruler({ pps, width, scroller }: Props) {
+export function Ruler({ pps, width, scroller, headerWidth }: Props) {
   const { scrollLeft, width: viewportWidth } = useScrollBox(scroller)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const areaRef = useRef<HTMLDivElement>(null)
@@ -50,7 +52,7 @@ export function Ruler({ pps, width, scroller }: Props) {
   const loop = useProjectStore((s) => s.project.loop)
   const [loopDraft, setLoopDraft] = useState<LoopRegion | null>(null)
   const shownLoop = loopDraft ?? loop
-  const visibleWidth = Math.max(0, viewportWidth - HEADER_WIDTH)
+  const visibleWidth = Math.max(0, viewportWidth - headerWidth)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -151,7 +153,7 @@ export function Ruler({ pps, width, scroller }: Props) {
       <canvas
         ref={canvasRef}
         className="pointer-events-none sticky top-0 block"
-        style={{ left: HEADER_WIDTH, width: visibleWidth, height: RULER_HEIGHT }}
+        style={{ left: headerWidth, width: visibleWidth, height: RULER_HEIGHT }}
       />
       <div
         className="absolute inset-x-0 top-0 cursor-pointer hover:bg-text/5"

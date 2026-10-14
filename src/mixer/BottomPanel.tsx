@@ -2,6 +2,7 @@ import { EffectsRack } from '../effects/EffectsRack'
 import { PianoRoll } from '../pianoroll/PianoRoll'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore, type BottomPanelView } from '../state/viewStore'
+import { useShellStore } from '../ui/shell'
 import { Mixer } from './Mixer'
 
 /** The panel under the timeline: the mixer, or the effect rack of one channel. */
@@ -13,6 +14,8 @@ export function BottomPanel() {
     channel === 'master' ? 'Master' : ([...s.project.tracks, ...s.project.buses].find((c) => c.id === channel)?.name ?? 'Master'),
   )
   const pianoClipId = useViewStore((s) => s.pianoRoll?.clipId)
+  const narrow = useShellStore((s) => s.narrow)
+  const height = panel === 'pianoRoll' ? (narrow ? 'h-[55vh]' : 'h-[26rem]') : narrow ? 'h-56' : 'h-72'
   const openTrack = useProjectStore((s) => s.project.tracks.find((t) => t.clips.some((c) => c.id === pianoClipId)))
   const clipName = openTrack?.clips.find((c) => c.id === pianoClipId)?.name
   const tab = (id: BottomPanelView, label: string) => (
@@ -27,7 +30,7 @@ export function BottomPanel() {
   )
   return (
     <section
-      className={`flex shrink-0 flex-col border-t border-line bg-bg ${panel === 'pianoRoll' ? 'h-[26rem]' : 'h-72'}`}
+      className={`flex shrink-0 flex-col border-t border-line bg-bg ${height}`}
       aria-label="Mixer, effects and piano roll"
     >
       <div role="tablist" className="flex shrink-0 border-b border-line bg-surface px-2">

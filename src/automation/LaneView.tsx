@@ -97,7 +97,7 @@ export const LaneView = memo(function LaneView({ track, target, pps, width, heig
 
   return (
     <svg
-      className="absolute inset-0 z-10 cursor-crosshair"
+      className="absolute inset-0 z-10 cursor-crosshair touch-none"
       width={width}
       height={height}
       onPointerDown={onBackgroundDown}

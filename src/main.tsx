@@ -4,9 +4,14 @@ import App from './App'
 import { connectRecording } from './recording/session'
 import { connectEngine } from './state/transport'
 import { startSession } from './storage/session'
+import { startShell, useShellStore } from './ui/shell'
+import { useViewStore } from './state/viewStore'
 import './index.css'
 
 connectEngine()
+startShell()
+// Phones start with the timeline in view; the library opens as a drawer from the top bar.
+if (useShellStore.getState().narrow) useViewStore.getState().setLibraryOpen(false)
 connectRecording()
 void startSession()
 

@@ -10,7 +10,9 @@ import { RecordControls } from '../recording/RecordControls'
 import { saveCurrent, useIsDirty, useSessionStore } from '../storage/session'
 import { ExportDialog } from './ExportDialog'
 import { ProjectsDialog } from './ProjectsDialog'
+import { Menu } from './Menu'
 import { NumberField } from './NumberField'
+import { setLitePreference, toggleFullscreen, useShellStore, type LitePreference } from './shell'
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
 
@@ -83,6 +85,9 @@ export function TransportBar() {
   const setLibraryOpen = useViewStore((s) => s.setLibraryOpen)
   const lyricsOpen = useViewStore((s) => s.lyricsOpen)
   const setLyricsOpen = useViewStore((s) => s.setLyricsOpen)
+  const { fullscreen, litePreference, autoLite, narrow } = useShellStore()
+  const liteLabel = (p: LitePreference) =>
+    `${p === litePreference ? '✓' : '\u2003'} Lite mode: ${p === 'auto' ? `Auto (${autoLite ? 'on' : 'off'} now)` : p === 'on' ? 'On' : 'Off'}`
 
   const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
 
@@ -114,16 +119,18 @@ export function TransportBar() {
           }}
           className="w-16"
         />
-        <select
-          value={syncMode}
-          onChange={(e) => setSyncMode(e.target.value as SyncMode)}
-          aria-label="Tempo sync mode"
-          title="How audio clips synced to the tempo (loops with a BPM in their name) follow it: Stretch keeps their pitch, Resample changes speed and pitch together"
-          className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-text"
-        >
-          <option value="stretch">Stretch</option>
-          <option value="resample">Resample</option>
-        </select>
+        {!narrow && (
+          <select
+            value={syncMode}
+            onChange={(e) => setSyncMode(e.target.value as SyncMode)}
+            aria-label="Tempo sync mode"
+            title="How audio clips synced to the tempo (loops with a BPM in their name) follow it: Stretch keeps their pitch, Resample changes speed and pitch together"
+            className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-text"
+          >
+            <option value="stretch">Stretch</option>
+            <option value="resample">Resample</option>
+          </select>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-sm text-text-dim">
@@ -160,7 +167,8 @@ export function TransportBar() {
           <input type="checkbox" checked={loop.enabled} onChange={(e) => setLoop({ enabled: e.target.checked })} />
           Loop
         </label>
-        {(['start', 'end'] as const).map((edge) => (
+        {/* On phones the loop is set by dragging on the ruler. */}
+        {!narrow && (['start', 'end'] as const).map((edge) => (
           <NumberField
             key={edge}
             label={`Loop ${edge} in seconds`}
@@ -171,10 +179,10 @@ export function TransportBar() {
             className="w-14"
           />
         ))}
-        <span>s</span>
+        {!narrow && <span>s</span>}
       </div>
 
-      <div className="ml-auto flex gap-2">
+      <div className="ml-auto flex flex-wrap gap-2">
         <button
           className={`${button} ${libraryOpen ? 'text-accent' : ''}`}
           onClick={() => setLibraryOpen(!libraryOpen)}
@@ -203,6 +211,17 @@ export function TransportBar() {
         >
           Mixer
         </button>
+        <Menu
+          label="View options"
+          className={button}
+          items={[
+            { label: 'Keyboard shortcuts (?)', onSelect: () => useViewStore.getState().setShortcutsOpen(true) },
+            { label: fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)', onSelect: () => void toggleFullscreen() },
+            ...(['auto', 'on', 'off'] as const).map((p) => ({ label: liteLabel(p), onSelect: () => setLitePreference(p) })),
+          ]}
+        >
+          View
+        </Menu>
         <button
           className={button}
           onClick={undo}

@@ -23,7 +23,7 @@ export default function App() {
       <Toaster />
       <footer className="border-t border-line px-4 py-1.5 text-[11px] text-text-dim">
         Space play/pause · Ctrl+Z / Ctrl+Y undo/redo · Ctrl+wheel zoom · Alt free placement · Del delete · Ctrl+D duplicate ·
-        Ctrl+C / Ctrl+V copy/paste · Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · drag samples or WAV/MP3 onto a track
+        Ctrl+C / Ctrl+V copy/paste · Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K click · drag samples or WAV/MP3 onto a track
       </footer>
     </div>
   )

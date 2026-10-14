@@ -6,6 +6,7 @@ import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import { RecordControls } from '../recording/RecordControls'
 import { saveCurrent, useIsDirty, useSessionStore } from '../storage/session'
 import { ExportDialog } from './ExportDialog'
 import { ProjectsDialog } from './ProjectsDialog'
@@ -40,7 +41,7 @@ function ProjectControls() {
   const status = dirty ? 'Unsaved changes' : savedId ? 'Saved' : 'No changes'
   const projectsOpen = useViewStore((s) => s.projectsOpen)
   const setProjectsOpen = useViewStore((s) => s.setProjectsOpen)
-  const button = 'rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm hover:bg-surface disabled:opacity-40'
+  const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
   return (
     <div className="flex items-center gap-2">
       <button className={button} onClick={() => setProjectsOpen(true)} title="Open, save and manage projects (Ctrl+O)">
@@ -80,10 +81,10 @@ export function TransportBar() {
   const libraryOpen = useViewStore((s) => s.libraryOpen)
   const setLibraryOpen = useViewStore((s) => s.setLibraryOpen)
 
-  const button = 'rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm hover:bg-surface disabled:opacity-40'
+  const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
 
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3">
+    <header className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-line bg-surface px-3 py-2">
       <ProjectControls />
       <TimeReadout />
       <button
@@ -96,6 +97,7 @@ export function TransportBar() {
       <button className={button} onClick={stop} title="Stop and return to start">
         Stop
       </button>
+      <RecordControls />
 
       <div className="flex items-center gap-2 text-sm text-text-dim">
         BPM
@@ -107,7 +109,7 @@ export function TransportBar() {
             setBpm(v)
             endGesture()
           }}
-          className="w-20"
+          className="w-16"
         />
       </div>
 
@@ -153,7 +155,7 @@ export function TransportBar() {
             min={0}
             step={0.5}
             onCommit={(v) => setLoop({ [edge]: Math.max(0, v) })}
-            className="w-16"
+            className="w-14"
           />
         ))}
         <span>s</span>
@@ -180,11 +182,23 @@ export function TransportBar() {
         >
           Mixer
         </button>
-        <button className={button} onClick={undo} disabled={!canUndo} title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : 'Undo'}>
-          Undo
+        <button
+          className={button}
+          onClick={undo}
+          disabled={!canUndo}
+          title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : 'Undo'}
+          aria-label="Undo"
+        >
+          ↶
         </button>
-        <button className={button} onClick={redo} disabled={!canRedo} title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : 'Redo'}>
-          Redo
+        <button
+          className={button}
+          onClick={redo}
+          disabled={!canRedo}
+          title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : 'Redo'}
+          aria-label="Redo"
+        >
+          ↷
         </button>
       </div>
     </header>

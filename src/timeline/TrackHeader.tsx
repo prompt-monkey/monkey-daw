@@ -12,6 +12,8 @@ import {
   toggleMute,
   toggleSolo,
 } from '../state/actions'
+import { readInputMeter, toggleArm } from '../recording/session'
+import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
 import { Menu } from '../ui/Menu'
 import { HEADER_WIDTH } from './geometry'
@@ -27,6 +29,7 @@ interface Props {
 
 export const TrackHeader = memo(function TrackHeader({ track, index, color, compact, height, onGripDown }: Props) {
   const endGesture = useProjectStore((s) => s.endGesture)
+  const armed = useRecordingStore((s) => s.armedTrackId === track.id)
   const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
 
   const slider = (
@@ -79,6 +82,14 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm font-semibold hover:bg-surface-2 focus:bg-bg"
           />
           <button
+            onClick={() => void toggleArm(track.id)}
+            className={`${small} ${armed ? 'border-danger bg-danger text-white' : 'text-danger'}`}
+            aria-pressed={armed}
+            title={armed ? 'Disarm (stop listening to the input)' : 'Arm this track for recording'}
+          >
+            ●
+          </button>
+          <button
             onClick={() => toggleMute(track.id)}
             className={`${small} ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
             aria-pressed={track.muted}
@@ -127,7 +138,12 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             0,
           )}
       </div>
-      <LevelMeter channelId={track.id} className="my-2 mr-2 w-1.5 shrink-0" />
+      {/* While armed, the meter shows the input level so you can set it before recording. */}
+      <LevelMeter
+        channelId={track.id}
+        read={armed ? readInputMeter : undefined}
+        className="my-2 mr-2 w-1.5 shrink-0"
+      />
     </div>
   )
 })

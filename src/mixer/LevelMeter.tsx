@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { engine } from '../audio/engine'
+import type { MeterReading } from '../audio/graph'
 import { meterPosition } from '../model/levels'
 import type { Id } from '../model/types'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
@@ -17,13 +18,16 @@ const YELLOW_FROM = 48 / 66
 const RED_FROM = 57 / 66
 
 interface Props {
-  channelId: Id | 'master'
+  /** Channel to meter; ignored when `read` is given. */
+  channelId?: Id | 'master'
+  /** Custom level source, e.g. the recording input. */
+  read?: () => MeterReading | null
   orientation?: 'vertical' | 'horizontal'
   className?: string
 }
 
 /** Stereo peak meter with falling bars and peak hold, drawn on canvas every frame. */
-export function LevelMeter({ channelId, orientation = 'vertical', className = '' }: Props) {
+export function LevelMeter({ channelId = 'master', read, orientation = 'vertical', className = '' }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const state = useRef({ level: [0, 0], hold: [0, 0], holdUntil: [0, 0], last: 0, idle: false })
 
@@ -34,7 +38,7 @@ export function LevelMeter({ channelId, orientation = 'vertical', className = ''
     const s = state.current
     const dt = s.last ? Math.min(0.1, now - s.last) : 0
     s.last = now
-    const reading = engine.readMeter(channelId)
+    const reading = read ? read() : engine.readMeter(channelId)
     for (let i = 0; i < 2; i++) {
       const target = meterPosition(reading?.peak[i] ?? 0)
       s.level[i] = Math.max(target, s.level[i] - FALL_RATE * dt)

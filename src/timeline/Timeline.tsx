@@ -11,6 +11,7 @@ import { useViewStore } from '../state/viewStore'
 import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
 import { toast } from '../ui/toast'
 import { ClipView, type ClipHandle } from './ClipView'
+import { LiveTake } from './LiveTake'
 import { trackColor } from './colors'
 import { applyPreview } from './edits'
 import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHTS, clampPps, laneGridBackground } from './geometry'
@@ -151,6 +152,7 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
           onResetGain={onResetGain}
         />
       ))}
+      <LiveTake trackId={track.id} pps={pps} height={height} />
     </div>
   )
 }

@@ -6,6 +6,7 @@ import type { Id, Project } from '../model/types'
 import { AssetRegistry } from './assets'
 import { getAudioContext } from './context'
 import { MixGraph, type MeterReading, type Voice } from './graph'
+import { beatsInWindow, scheduleClick } from './metronome'
 import { PlaybackPlanner, clipEvents } from './schedule'
 
 const TICK_MS = 25
@@ -28,6 +29,18 @@ export class AudioEngine {
   private planner: PlaybackPlanner | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private voices = new Set<Voice>()
+  /** While recording, playback runs straight through instead of looping. */
+  private ignoreLoop = false
+  /** Where the current playback started: timeline time and the audio clock time it maps to. */
+  private origin: { time: number; ctxTime: number } | null = null
+
+  /** Metronome settings, read on every scheduling tick. */
+  readonly metronome = {
+    enabled: false,
+    volume: 0.6,
+    /** During a count-in, clicks play before this timeline time even when the metronome is off. */
+    countInUntil: null as number | null,
+  }
 
   get context(): AudioContext {
     this.ctx ??= getAudioContext()
@@ -50,13 +63,18 @@ export class AudioEngine {
     if (this.planner && timelineChanged(prev, project)) this.restart()
   }
 
-  async play(from: number) {
+  /**
+   * Starts playback at `from` (negative values give a lead-in before 0, used for count-ins).
+   * With `ignoreLoop`, playback runs past the loop end instead of wrapping (used while recording).
+   */
+  async play(from: number, { ignoreLoop = false }: { ignoreLoop?: boolean } = {}) {
     const ctx = this.context
     if (ctx.state !== 'running') await ctx.resume()
     this.stopVoices()
     this.mix ??= new MixGraph(ctx)
     this.mix.sync(this.project, true)
-    this.planner = new PlaybackPlanner(ctx.currentTime + START_DELAY, Math.max(0, from))
+    this.ignoreLoop = ignoreLoop
+    this.startPlanner(ctx.currentTime + START_DELAY, from)
     this.tick()
     this.timer ??= setInterval(() => this.tick(), TICK_MS)
   }
@@ -67,8 +85,22 @@ export class AudioEngine {
     if (this.timer !== null) clearInterval(this.timer)
     this.timer = null
     this.planner = null
+    this.origin = null
     this.stopVoices()
     return position
+  }
+
+  /**
+   * The audio clock time at which the playhead reaches `time`, for straight (non-looping)
+   * playback. Null when stopped.
+   */
+  contextTimeAt(time: number): number | null {
+    return this.origin ? this.origin.ctxTime + (time - this.origin.time) : null
+  }
+
+  private startPlanner(ctxTime: number, time: number) {
+    this.planner = new PlaybackPlanner(ctxTime, time)
+    this.origin = { time, ctxTime }
   }
 
   /** Current playhead position in seconds, or null when stopped. */
@@ -81,14 +113,22 @@ export class AudioEngine {
     const position = this.position()
     if (position === null || !this.ctx) return
     this.stopVoices()
-    this.planner = new PlaybackPlanner(this.ctx.currentTime + START_DELAY, position)
+    this.startPlanner(this.ctx.currentTime + START_DELAY, position)
     this.tick()
   }
 
   private tick() {
     const { planner, mix, ctx } = this
     if (!planner || !mix || !ctx) return
-    for (const { window, ctxOffset } of planner.plan(ctx.currentTime + LOOKAHEAD, this.project.loop)) {
+    const loop = this.ignoreLoop ? { ...this.project.loop, enabled: false } : this.project.loop
+    const { bpm, timeSignature } = this.project
+    const { enabled, volume, countInUntil } = this.metronome
+    for (const { window, ctxOffset } of planner.plan(ctx.currentTime + LOOKAHEAD, loop)) {
+      if (enabled || countInUntil !== null) {
+        for (const beat of beatsInWindow(window.from, window.to, bpm, timeSignature)) {
+          if (enabled || beat.time < countInUntil!) scheduleClick(ctx, beat.time + ctxOffset, beat.accent, volume)
+        }
+      }
       for (const ev of clipEvents(this.project, window)) {
         const buffer = this.assets.get(ev.clip.assetId)
         if (!buffer) continue

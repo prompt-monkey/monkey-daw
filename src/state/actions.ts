@@ -190,8 +190,8 @@ export function setLoop(loop: Partial<Project['loop']>) {
 }
 
 /** Registers an audio asset and places it as a clip on a track. */
-export function addAudioClip(trackId: Id, asset: AssetMeta, start: number) {
-  update('Add clip', (p) => {
+export function addAudioClip(trackId: Id, asset: AssetMeta, start: number, label = 'Add clip') {
+  update(label, (p) => {
     const t = findTrack(p, trackId)
     if (!t) return
     p.assets[asset.id] = asset

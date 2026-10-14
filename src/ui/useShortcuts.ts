@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { addBus, clipboardItems, deleteClips, duplicateClips, pasteClips } from '../state/actions'
+import { toggleRecording } from '../recording/session'
+import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
 import { saveCurrent } from '../storage/session'
 import { playheadPosition, togglePlay } from '../state/transport'
@@ -16,7 +18,7 @@ function isTyping(target: EventTarget | null): boolean {
  * Global shortcuts:
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
  * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
- * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects
+ * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome
  */
 export function useShortcuts() {
   useEffect(() => {
@@ -38,6 +40,13 @@ export function useShortcuts() {
       if (e.code === 'Space' && !mod) {
         handled()
         togglePlay()
+      } else if (!mod && key === 'r') {
+        handled()
+        toggleRecording()
+      } else if (!mod && key === 'k') {
+        handled()
+        const rec = useRecordingStore.getState()
+        rec.setPrefs({ metronome: !rec.prefs.metronome })
       } else if (mod && key === 'o') {
         handled()
         view.setProjectsOpen(true)

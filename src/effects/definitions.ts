@@ -4,7 +4,7 @@
 import { createId } from '../model/factory'
 import type { Effect, EffectParams, EffectType } from '../model/types'
 
-export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x'
+export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x' | 'ct'
 
 export interface NumberParam {
   kind: 'number'
@@ -47,8 +47,8 @@ export interface EffectDef {
    * note length instead of its knob ('time' in seconds or 'rate' in Hz).
    */
   sync?: { choice: string; param: string; as: 'time' | 'rate' }
-  /** Batch 2 (character and space) or batch 1 (essentials); the rack lists them in groups. */
-  group: 'essentials' | 'character'
+  /** Which batch it belongs to; the effect picker lists them in these groups. */
+  group: 'essentials' | 'character' | 'specialist'
 }
 
 const fixed = (p: NumberParam): NumberParam => ({ ...p, automatable: false })
@@ -371,6 +371,77 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
       fixed(num('release', 'Release', 10, 100, 60, '%')),
     ],
   },
+
+  // --- Batch 3: specialist ---------------------------------------------------------------------
+  transient: {
+    type: 'transient',
+    group: 'specialist',
+    name: 'Transient shaper',
+    description: 'Makes hits punchier or softer, and their ring longer or shorter, at any level.',
+    params: [
+      num('attack', 'Attack', -100, 100, 0, '%'),
+      num('sustain', 'Sustain', -100, 100, 0, '%'),
+      num('output', 'Output', -12, 12, 0, 'dB'),
+    ],
+  },
+  deesser: {
+    type: 'deesser',
+    group: 'specialist',
+    name: 'De-esser',
+    description: 'Tames harsh “s” and “sh” sounds in vocals by turning down only the highs when they spike.',
+    params: [
+      num('freq', 'Freq', 2000, 16000, 6000, 'Hz', 'log'),
+      num('threshold', 'Threshold', -60, 0, -30, 'dB'),
+      num('range', 'Range', 0, 24, 10, 'dB'),
+    ],
+  },
+  opto: {
+    type: 'opto',
+    group: 'specialist',
+    name: 'Opto compressor',
+    description: 'Smooth, musical compression with one main knob, in the style of classic optical units.',
+    params: [
+      num('peakReduction', 'Peak reduction', 0, 100, 40, '%'),
+      num('gain', 'Gain', 0, 30, 6, 'dB'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
+    ],
+  },
+  doubler: {
+    type: 'doubler',
+    group: 'specialist',
+    name: '12-string doubler',
+    description: 'Turns a 6-string into a shimmering 12-string: an octave-up copy and a detuned double, spread wide.',
+    params: [
+      num('octave', 'Octave', 0, 100, 60, '%'),
+      num('detune', 'Detune', 0, 30, 8, 'ct'),
+      num('spread', 'Spread', 0, 100, 70, '%'),
+      num('mix', 'Mix', 0, 100, 50, '%'),
+    ],
+  },
+  amp: {
+    type: 'amp',
+    group: 'specialist',
+    name: 'Amp / cabinet',
+    description: 'A guitar amp’s drive and tone stack, through a speaker cabinet.',
+    params: [
+      num('drive', 'Drive', 0, 40, 18, 'dB'),
+      num('bass', 'Bass', -12, 12, 0, 'dB'),
+      num('mid', 'Mid', -12, 12, 0, 'dB'),
+      num('treble', 'Treble', -12, 12, 0, 'dB'),
+      {
+        kind: 'choice',
+        key: 'cabinet',
+        label: 'Cabinet',
+        options: [
+          { value: 'off', label: 'None' },
+          { value: '1x12', label: '1×12' },
+          { value: '4x12', label: '4×12' },
+        ],
+        default: '1x12',
+      },
+      num('output', 'Output', -30, 6, -12, 'dB'),
+    ],
+  },
 }
 
 /** Seconds between duck pulses. */
@@ -483,5 +554,7 @@ export function formatValue(def: NumberParam, value: number): string {
       return `${Math.floor(value)} bit`
     case 'x':
       return `${value < 10 ? value.toFixed(1) : Math.round(value)}×`
+    case 'ct':
+      return `${Math.round(value)} ct`
   }
 }

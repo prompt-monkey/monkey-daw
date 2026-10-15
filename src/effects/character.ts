@@ -1,7 +1,7 @@
 // Effects batch 2, character and space: modulation, lo-fi, tone shaping, stereo and space. Each is
 // a small graph of built-in nodes (the bitcrusher uses an AudioWorklet), like batch 1.
 
-import type { Effect, EffectType } from '../model/types'
+import type { Effect } from '../model/types'
 import { duckInterval, lfoRate } from './definitions'
 import { DUCK_ATTACK, dbToGain, duckGain, duckPulses, plateImpulse, saturationCurve, seedFromId, seededRandom, softClipCurve } from './dsp'
 import { disconnectAll, dryWet, identity, instance, lfo, nyquistSafe, stereoInput, type Binding, type EffectInstance } from './parts'
@@ -476,7 +476,9 @@ function duck(ctx: BaseAudioContext): EffectInstance {
   })
 }
 
-export const CHARACTER_BUILDERS: Record<Exclude<EffectType, 'eq' | 'compressor' | 'filter' | 'delay' | 'reverb' | 'saturation' | 'gate'>, Builder> = {
+type CharacterType = 'chorus' | 'phaser' | 'tremolo' | 'vibrato' | 'tape' | 'bitcrusher' | 'clipper' | 'tilt' | 'air' | 'midside' | 'slapback' | 'plate' | 'spread' | 'duck'
+
+export const CHARACTER_BUILDERS: Record<CharacterType, Builder> = {
   chorus,
   phaser,
   tremolo,

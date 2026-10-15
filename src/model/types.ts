@@ -206,6 +206,12 @@ export type EffectType =
   | 'plate'
   | 'spread'
   | 'duck'
+  // Batch 3: specialist.
+  | 'transient'
+  | 'deesser'
+  | 'opto'
+  | 'doubler'
+  | 'amp'
 
 /** Parameter values: numbers in real units (Hz, dB, ms…), choices as strings, toggles as booleans. */
 export type EffectParams = Record<string, number | string | boolean>

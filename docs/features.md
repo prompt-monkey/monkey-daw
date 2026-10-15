@@ -5,8 +5,9 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Phases 0–5 and effects batch 2 are built. Every step has unit tests (228 in total) and was checked
-in Chrome. Effects batch 3 is what's left.
+Phases 0–5, effects batch 2 and the first five effects of batch 3 are built. Every step has unit
+tests (237 in total) and was checked in Chrome. Auto-tune and the optional graphic pitch editor are
+what's left.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -25,8 +26,10 @@ in Chrome. Effects batch 3 is what's left.
 | 5 | Export: MP3, stems as a ZIP | Done | `dad7618` |
 | 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | `3d54e4b` |
 | 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | `73d7ab2` |
-| 6 | Effects batch 2: character and space (14 effects) | Done | |
-| 6 | Effects batch 3: specialist | Next | |
+| 6 | Effects batch 2: character and space (14 effects) | Done | `ae07721` |
+| 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | |
+| 6 | Effects batch 3: auto-tune | Next | |
+| 6 | Graphic pitch editor | Optional stretch goal | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: reverse, pitch shift and free stretching of clips, curved clip fades, consolidate
@@ -196,9 +199,22 @@ softness and the duck's depth and release can't be automated (they reshape audio
 schedules); the other new knobs can. Tremolo and the other LFOs run free in phase (only their rate
 follows the tempo).
 
-**Batch 3: specialist, AudioWorklet-based (deferred to the end)**
-- Transient shaper, de-esser, optical-style compressor
-- 12-string doubler, amp/cabinet colour
+**Batch 3: specialist (phase 6)**
+| Effect | Parameters |
+|---|---|
+| Transient shaper | Attack and sustain (−100…100%, up to ±12 dB on the attack), output; works at any level |
+| De-esser | Frequency, threshold, range; turns down only the highs, split so the rest is untouched |
+| Opto compressor | Peak reduction, gain, mix; gentle 3:1 with a soft knee and a two-stage release |
+| 12-string doubler | Octave level, detune (cents), spread, mix |
+| Amp / cabinet | Drive, bass, mid, treble, cabinet (none, 1×12, 4×12), output |
+
+The first four run in one AudioWorklet; their DSP lives in `specialist-dsp.ts` and is unit-tested
+on its own. The amp is built from standard nodes (an asymmetric tube-style curve and filters that
+voice the cabinet). The doubler's pitch shifter is a simple two-head delay line: fine for a
+doubled copy under the dry sound, but it smears big shifts into sidebands, so auto-tune will need
+a better one. New presets: Vocal polish, Acoustic 12-string, Punchy drums and Electric crunch.
+
+Still to do:
 - Auto-tune (real-time pitch correction to a key and scale): its own step
 - Graphic pitch editor: optional stretch goal
 

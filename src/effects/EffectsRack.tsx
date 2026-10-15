@@ -277,6 +277,7 @@ function PresetMenu({ channel, effects, channelName }: { channel: ChannelRef; ef
 const GROUPS = [
   { id: 'essentials', title: 'Essentials' },
   { id: 'character', title: 'Character and space' },
+  { id: 'specialist', title: 'Specialist' },
 ] as const
 
 /** Every effect, by group, with what it does. */

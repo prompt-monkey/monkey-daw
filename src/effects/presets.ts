@@ -84,6 +84,36 @@ export const BUILT_IN_PRESETS: ChainPreset[] = [
     ],
   },
   {
+    name: 'Vocal polish',
+    chain: [
+      { type: 'deesser', params: { freq: 6500, threshold: -32, range: 8 } },
+      { type: 'opto', params: { peakReduction: 45, gain: 5 } },
+      { type: 'air', params: { amount: 3, freq: 12000 } },
+    ],
+  },
+  {
+    name: 'Acoustic 12-string',
+    chain: [
+      { type: 'eq', params: { lowCut: 90, midGain: -2, midFreq: 300 } },
+      { type: 'doubler', params: { octave: 65, detune: 7, spread: 75, mix: 50 } },
+      { type: 'plate', params: { decay: 1.6, preDelay: 15, mix: 15 } },
+    ],
+  },
+  {
+    name: 'Punchy drums',
+    chain: [
+      { type: 'transient', params: { attack: 40, sustain: -20 } },
+      { type: 'clipper', params: { drive: 3, ceiling: -1, softness: 50 } },
+    ],
+  },
+  {
+    name: 'Electric crunch',
+    chain: [
+      { type: 'amp', params: { drive: 24, bass: 2, mid: 3, treble: 1, cabinet: '4x12', output: -16 } },
+      { type: 'slapback', params: { time: 95, tone: 3500, mix: 12 } },
+    ],
+  },
+  {
     name: 'Glue bus',
     chain: [
       { type: 'compressor', params: { threshold: -12, ratio: 2, knee: 10, attack: 30, release: 200, makeup: 1 } },

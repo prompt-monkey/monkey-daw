@@ -6,6 +6,8 @@
 
 import type { Effect, EffectParams } from '../model/types'
 import { CHARACTER_BUILDERS } from './character'
+import { SPECIALIST_BUILDERS } from './specialist'
+import specialistWorkletUrl from './specialist.worklet.ts?worker&url'
 import crusherWorkletUrl from './crusher.worklet.ts?worker&url'
 import { delaySeconds } from './definitions'
 import { dbToGain, reverbImpulse, saturationCurve, seedFromId } from './dsp'
@@ -26,7 +28,11 @@ export function ensureEffectWorklets(ctx: BaseAudioContext): Promise<void> {
   if (!promise) {
     const load = (url: string, name: string) =>
       ctx.audioWorklet.addModule(url).catch((err) => console.warn(`${name} effect unavailable`, err))
-    promise = Promise.all([load(gateWorkletUrl, 'Gate'), load(crusherWorkletUrl, 'Bitcrusher')]).then(() => {})
+    promise = Promise.all([
+      load(gateWorkletUrl, 'Gate'),
+      load(crusherWorkletUrl, 'Bitcrusher'),
+      load(specialistWorkletUrl, 'Specialist'),
+    ]).then(() => {})
     loaded.set(ctx, promise)
   }
   return promise
@@ -291,6 +297,7 @@ const BUILDERS: Record<Effect['type'], (ctx: BaseAudioContext, effect: Effect) =
   saturation,
   gate,
   ...CHARACTER_BUILDERS,
+  ...SPECIALIST_BUILDERS,
 }
 
 export function createEffectInstance(ctx: BaseAudioContext, effect: Effect): EffectInstance {

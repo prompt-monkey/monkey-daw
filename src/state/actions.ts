@@ -42,6 +42,7 @@ import {
   type Track,
   type TrackKind,
 } from '../model/types'
+import { splitClip } from '../timeline/edits'
 import { useProjectStore } from './projectStore'
 import type { ClipboardItem } from './viewStore'
 
@@ -286,6 +287,26 @@ export function addAudioClip(trackId: Id, asset: AssetMeta, start: number, label
   })
 }
 
+/**
+ * Swaps the audio an audio clip plays for another asset, keeping its place, gain and fades. The
+ * clip keeps its length unless the new audio is shorter.
+ */
+export function replaceClipAudio(clipId: Id, asset: AssetMeta) {
+  update('Replace audio', (p) => {
+    const clip = findAudioClip(p, clipId)
+    if (!clip) return
+    p.assets[asset.id] = asset
+    const fresh = clipForAsset(asset, clip.start, p.bpm)
+    const duration = Math.min(clip.duration, fresh.duration)
+    Object.assign(clip, { assetId: asset.id, name: fresh.name, offset: 0, duration })
+    clip.fadeIn = Math.min(clip.fadeIn, duration)
+    clip.fadeOut = Math.min(clip.fadeOut, duration - clip.fadeIn)
+    if (fresh.sourceBpm) clip.sourceBpm = fresh.sourceBpm
+    else delete clip.sourceBpm
+    delete clip.pitchSource
+  })
+}
+
 /** Creates a new track (named after the asset) holding the asset as one clip. */
 export function addTrackWithClip(asset: AssetMeta, start: number): Id {
   const track = createTrack(asset.name)
@@ -358,6 +379,31 @@ export function clipboardItems(p: Project, clipIds: Id[]): ClipboardItem[] {
     }
   }
   return items
+}
+
+/** Cuts the given clips at `at` (those it falls inside). Returns the ids of the right-hand parts. */
+export function splitClips(clipIds: Id[], at: number): Id[] {
+  const ids = new Set(clipIds)
+  const created: Id[] = []
+  update(clipIds.length > 1 ? 'Split clips' : 'Split clip', (p) => {
+    for (const t of p.tracks) {
+      for (const clip of [...t.clips]) {
+        if (!ids.has(clip.id)) continue
+        const reversed = !isMidiClip(clip) && clip.reversed === true
+        const parts = splitClip(current(clip), at, { rate: clipRate(clip, p.bpm), reversed }, p.bpm)
+        if (!parts) continue
+        const [left, right] = parts
+        Object.assign(clip, left)
+        if (clip.fadeOutCurve === undefined) delete clip.fadeOutCurve
+        const copy = { ...right, id: createId('clp') }
+        if (copy.fadeInCurve === undefined) delete copy.fadeInCurve
+        if (isMidiClip(copy)) copy.notes = copy.notes.map((n) => ({ ...n, id: createId('note') }))
+        t.clips.push(copy)
+        created.push(copy.id)
+      }
+    }
+  })
+  return created
 }
 
 /** Copies the clips right after the end of the group. Returns the new ids. */
@@ -617,6 +663,21 @@ export function setPadSample(trackId: Id, note: number, asset: AssetMeta | null)
       delete pad.sample
     }
     findTrack(p, trackId)!.kit!.preset = 'custom'
+  })
+}
+
+/** Gives several pads new samples at once, as one undo step (the kit becomes custom). */
+export function setPadSamples(trackId: Id, samples: { note: number; asset: AssetMeta }[], label = 'Kit from library') {
+  if (!samples.length) return
+  update(label, (p) => {
+    for (const { note, asset } of samples) {
+      const pad = findPad(p, trackId, note)
+      if (!pad) continue
+      p.assets[asset.id] = asset
+      pad.sample = { assetId: asset.id }
+    }
+    const kit = findTrack(p, trackId)?.kit
+    if (kit) kit.preset = 'custom'
   })
 }
 

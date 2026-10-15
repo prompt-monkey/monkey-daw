@@ -5,7 +5,7 @@ import { createId } from '../model/factory'
 import { SCALE_KEYS } from './specialist-dsp'
 import type { Effect, EffectParams, EffectType } from '../model/types'
 
-export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x' | 'ct'
+export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x' | 'ct' | 'st'
 
 export interface NumberParam {
   kind: 'number'
@@ -49,7 +49,7 @@ export interface EffectDef {
    */
   sync?: { choice: string; param: string; as: 'time' | 'rate' }
   /** Which batch it belongs to; the effect picker lists them in these groups. */
-  group: 'essentials' | 'character' | 'specialist'
+  group: 'essentials' | 'character' | 'specialist' | 'creative'
 }
 
 const fixed = (p: NumberParam): NumberParam => ({ ...p, automatable: false })
@@ -83,6 +83,7 @@ export const SYNC_DIVISIONS: Record<string, number> = {
   '1/8': 0.5,
   '1/8t': 1 / 3,
   '1/16': 0.25,
+  '1/32': 0.125,
 }
 
 /** Auto-tune scale names. */
@@ -119,12 +120,24 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     name: 'Compressor',
     description: 'Evens out the level: loud parts are turned down above the threshold.',
     params: [
+      {
+        kind: 'choice',
+        key: 'mode',
+        label: 'Mode',
+        options: [
+          { value: 'free', label: 'Custom' },
+          { value: 'glue', label: 'Glue' },
+          { value: 'punch', label: 'Punch' },
+        ],
+        default: 'free',
+      },
       num('threshold', 'Threshold', -60, 0, -18, 'dB'),
       num('ratio', 'Ratio', 1, 20, 4, ':1', 'log'),
       num('knee', 'Knee', 0, 30, 6, 'dB'),
       num('attack', 'Attack', 0.1, 200, 10, 'ms', 'log'),
       num('release', 'Release', 10, 1000, 150, 'ms', 'log'),
       num('makeup', 'Makeup', 0, 24, 0, 'dB'),
+      { kind: 'toggle', key: 'autoMakeup', label: 'Auto gain', default: false },
       num('mix', 'Mix', 0, 100, 100, '%'),
     ],
   },
@@ -169,11 +182,14 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     type: 'reverb',
     group: 'essentials',
     name: 'Reverb',
-    description: 'Room and hall ambience.',
+    description: 'Room and hall ambience; the pre-delay can lock to the tempo.',
+    sync: { choice: 'sync', param: 'preDelay', as: 'time' },
     params: [
       { ...num('decay', 'Decay', 0.2, 10, 2, 's', 'log'), automatable: false },
+      syncChoice('off', ['1/32', '1/16', '1/8', '1/4']),
       num('preDelay', 'Pre-delay', 0, 200, 10, 'ms'),
       num('damping', 'Damping', 1000, 20000, 8000, 'Hz', 'log'),
+      { kind: 'toggle', key: 'stereo', label: 'Stereo', default: true },
       num('mix', 'Mix', 0, 100, 25, '%'),
     ],
   },
@@ -181,8 +197,18 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     type: 'saturation',
     group: 'essentials',
     name: 'Saturation',
-    description: 'Warm drive, from subtle thickening to heavy distortion.',
+    description: 'Warm drive, from subtle thickening to heavy distortion: tape (soft) or tube (even harmonics).',
     params: [
+      {
+        kind: 'choice',
+        key: 'character',
+        label: 'Character',
+        options: [
+          { value: 'tape', label: 'Tape' },
+          { value: 'tube', label: 'Tube' },
+        ],
+        default: 'tape',
+      },
       { ...num('drive', 'Drive', 0, 36, 12, 'dB'), automatable: false },
       num('tone', 'Tone', 1000, 20000, 12000, 'Hz', 'log'),
       num('output', 'Output', -24, 6, -6, 'dB'),
@@ -276,17 +302,23 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     group: 'character',
     name: 'Vibrato',
     description: 'Wobbles the pitch, like a singer’s or a guitarist’s vibrato.',
-    params: [num('rate', 'Rate', 0.5, 12, 5, 'Hz', 'log'), num('depth', 'Depth', 0, 100, 30, '%')],
+    params: [
+      num('rate', 'Rate', 0.5, 12, 5, 'Hz', 'log'),
+      num('depth', 'Depth', 0, 100, 30, '%'),
+      num('tone', 'Tone', 1000, 20000, 20000, 'Hz', 'log'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
+    ],
   },
   tape: {
     type: 'tape',
     group: 'character',
     name: 'Tape',
-    description: 'Old tape: slow wobble, fast flutter, and wear that dulls the highs and adds hiss.',
+    description: 'Old tape: slow wobble, fast flutter, wear that dulls the highs, and hiss.',
     params: [
       num('wobble', 'Wobble', 0, 100, 25, '%'),
       num('flutter', 'Flutter', 0, 100, 15, '%'),
       num('wear', 'Wear', 0, 100, 30, '%'),
+      num('noise', 'Noise', 0, 100, 30, '%'),
       num('mix', 'Mix', 0, 100, 100, '%'),
     ],
   },
@@ -298,6 +330,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     params: [
       num('bits', 'Bits', 1, 16, 8, 'bits'),
       num('downsample', 'Downsample', 1, 32, 4, 'x', 'log'),
+      num('tone', 'Tone', 1000, 20000, 20000, 'Hz', 'log'),
       num('mix', 'Mix', 0, 100, 100, '%'),
     ],
   },
@@ -317,7 +350,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     group: 'character',
     name: 'Tilt EQ',
     description: 'One knob for tone: tilts toward brighter (right) or darker (left) around a pivot.',
-    params: [num('tilt', 'Tilt', -6, 6, 0, 'dB'), num('pivot', 'Pivot', 200, 5000, 800, 'Hz', 'log')],
+    params: [num('tilt', 'Tilt', -6, 6, 0, 'dB'), num('pivot', 'Pivot', 200, 5000, 800, 'Hz', 'log'), num('output', 'Output', -12, 12, 0, 'dB')],
   },
   air: {
     type: 'air',
@@ -330,8 +363,13 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     type: 'midside',
     group: 'character',
     name: 'Mid/Side',
-    description: 'Balances the centre (mid) against the sides: turn the sides up to widen, down to narrow.',
-    params: [num('mid', 'Mid', -12, 6, 0, 'dB'), num('side', 'Side', -24, 12, 0, 'dB')],
+    description: 'Balances the centre (mid) against the sides: turn the sides up to widen, down to narrow. Mono bass keeps the lows centred.',
+    params: [
+      num('mid', 'Mid', -12, 6, 0, 'dB'),
+      num('side', 'Side', -24, 12, 0, 'dB'),
+      { kind: 'toggle', key: 'monoBass', label: 'Mono bass', default: false },
+      num('bassFreq', 'Bass below', 40, 300, 120, 'Hz', 'log'),
+    ],
   },
   slapback: {
     type: 'slapback',
@@ -363,20 +401,33 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     group: 'character',
     name: 'Stereo spread',
     description: 'Makes a mono sound wide by delaying one side a few milliseconds.',
-    params: [num('amount', 'Amount', 0, 100, 50, '%'), num('time', 'Time', 2, 30, 12, 'ms')],
+    params: [num('amount', 'Amount', 0, 100, 50, '%'), num('time', 'Time', 2, 30, 12, 'ms'), num('tone', 'Tone', 1000, 20000, 20000, 'Hz', 'log')],
   },
   duck: {
     type: 'duck',
     group: 'character',
     name: 'Sidechain duck',
-    description: 'Pumps the volume in time with the beat, like a kick-triggered sidechain.',
+    description: 'Pumps the volume in time with the beat (or every so many ms), like a kick-triggered sidechain.',
+    sync: { choice: 'rate', param: 'time', as: 'time' },
     params: [
       {
         kind: 'choice',
         key: 'rate',
         label: 'Every',
-        options: ['1/2', '1/4', '1/8', '1/16'].map((v) => ({ value: v, label: v })),
+        options: [{ value: 'off', label: 'Free' }, ...['1/2', '1/4', '1/8', '1/16'].map((v) => ({ value: v, label: v }))],
         default: '1/4',
+      },
+      fixed(num('time', 'Time', 50, 2000, 500, 'ms', 'log')),
+      {
+        kind: 'choice',
+        key: 'shape',
+        label: 'Pump',
+        options: [
+          { value: 'soft', label: 'Soft' },
+          { value: 'hard', label: 'Hard' },
+          { value: 'short', label: 'Short' },
+        ],
+        default: 'soft',
       },
       fixed(num('depth', 'Depth', 0, 100, 60, '%')),
       fixed(num('release', 'Release', 10, 100, 60, '%')),
@@ -413,6 +464,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
     description: 'Smooth, musical compression with one main knob, in the style of classic optical units.',
     params: [
       num('peakReduction', 'Peak reduction', 0, 100, 40, '%'),
+      num('speed', 'Speed', 0, 100, 50, '%'),
       num('gain', 'Gain', 0, 30, 6, 'dB'),
       num('mix', 'Mix', 0, 100, 100, '%'),
     ],
@@ -426,6 +478,7 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
       num('octave', 'Octave', 0, 100, 60, '%'),
       num('detune', 'Detune', 0, 30, 8, 'ct'),
       num('spread', 'Spread', 0, 100, 70, '%'),
+      num('bright', 'Bright', 0, 9, 0, 'dB'),
       num('mix', 'Mix', 0, 100, 50, '%'),
     ],
   },
@@ -478,11 +531,89 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
       num('mix', 'Mix', 0, 100, 100, '%'),
     ],
   },
+
+  // --- Batch 4: creative -----------------------------------------------------------------------
+  crystal: {
+    type: 'crystal',
+    group: 'creative',
+    name: 'Crystal',
+    description: 'Shimmer: repeats that climb an octave (or any interval) each time, for glassy, ringing tails.',
+    params: [
+      num('shift', 'Shift', -12, 12, 12, 'st'),
+      num('splice', 'Splice', 60, 500, 250, 'ms', 'log'),
+      num('feedback', 'Feedback', 0, 85, 45, '%'),
+      num('mix', 'Mix', 0, 100, 35, '%'),
+    ],
+  },
+  tapeEcho: {
+    type: 'tapeEcho',
+    group: 'creative',
+    name: 'Tape echo',
+    description: 'A worn tape delay: wobbling, darkening repeats that saturate, and can rise or fall in pitch.',
+    sync: { choice: 'sync', param: 'time', as: 'time' },
+    params: [
+      syncChoice('off'),
+      num('time', 'Time', 50, 1000, 320, 'ms', 'log'),
+      num('feedback', 'Feedback', 0, 80, 45, '%'),
+      num('warp', 'Warp', 0, 100, 40, '%'),
+      num('shift', 'Shift', -24, 24, 0, 'st'),
+      num('mix', 'Mix', 0, 100, 35, '%'),
+    ],
+  },
+  subBoost: {
+    type: 'subBoost',
+    group: 'creative',
+    name: 'Sub booster',
+    description: 'More weight for 808s and bass: a sub lift plus harmonics so the low end is heard on small speakers.',
+    params: [
+      num('freq', 'Freq', 35, 90, 55, 'Hz', 'log'),
+      num('body', 'Body', 0, 100, 50, '%'),
+      num('drive', 'Drive', 0, 100, 30, '%'),
+    ],
+  },
+  brass: {
+    type: 'brass',
+    group: 'creative',
+    name: 'Brass enhancer',
+    description: 'Fuller, brighter horns: body in the low mids, bite in the upper mids, and warm saturation.',
+    params: [
+      num('body', 'Body', -6, 6, 2, 'dB'),
+      num('bite', 'Bite', 0, 9, 4.5, 'dB'),
+      num('heat', 'Heat', 0, 100, 30, '%'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
+    ],
+  },
+  vinyl: {
+    type: 'vinyl',
+    group: 'creative',
+    name: 'Vinyl',
+    description: 'An old record: worn, narrow tone, a warped wobble, and surface hiss with crackles.',
+    params: [
+      num('wear', 'Wear', 0, 100, 40, '%'),
+      num('wobble', 'Wobble', 0, 100, 30, '%'),
+      num('noise', 'Noise', 0, 100, 30, '%'),
+      num('mix', 'Mix', 0, 100, 60, '%'),
+    ],
+  },
 }
 
 /** Seconds between duck pulses. */
 export function duckInterval(params: EffectParams, bpm: number): number {
-  return ((SYNC_DIVISIONS[params.rate as string] ?? 1) * 60) / bpm
+  const division = SYNC_DIVISIONS[params.rate as string]
+  return division ? (division * 60) / bpm : Math.max(0.05, ((params.time as number) || 500) / 1000)
+}
+
+/** Recovery time constant and hold at the floor of each duck pulse, from its shape. */
+export function duckShape(params: EffectParams, interval: number): { tau: number; hold: number } {
+  const tau = (((params.release as number) / 100) * interval) / 4
+  if (params.shape === 'hard') return { tau: tau / 2, hold: interval * 0.25 }
+  if (params.shape === 'short') return { tau: tau / 3, hold: 0 }
+  return { tau, hold: 0 }
+}
+
+/** Makeup gain in dB that roughly undoes a compressor's reduction: half its most at 0 dB in. */
+export function autoMakeupDb(threshold: number, ratio: number): number {
+  return (Math.abs(threshold) * (1 - 1 / Math.max(1, ratio))) / 2
 }
 
 /** A tempo-synced number's value (seconds or Hz), or null when the effect runs free. */
@@ -592,5 +723,9 @@ export function formatValue(def: NumberParam, value: number): string {
       return `${value < 10 ? value.toFixed(1) : Math.round(value)}×`
     case 'ct':
       return `${Math.round(value)} ct`
+    case 'st': {
+      const st = Math.round(value)
+      return `${st > 0 ? '+' : ''}${st} st`
+    }
   }
 }

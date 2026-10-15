@@ -5,8 +5,9 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Every planned feature is built, including the optional graphic pitch editor. Every step has unit
-tests (270 in total) and was checked in Chrome.
+Every planned feature is built, including the optional graphic pitch editor, and a second pass filled the
+remaining gaps (step 8). Every step has unit tests (297 in
+total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -28,11 +29,12 @@ tests (270 in total) and was checked in Chrome.
 | 6 | Effects batch 2: character and space (14 effects) | Done | `ae07721` |
 | 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | `b229b4f` |
 | 6 | Effects batch 3: auto-tune | Done | `642b1fd` |
-| 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | |
+| 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `36f01b8` |
+| 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | |
 
 Known gaps in what's built (planned for later steps):
-- Timeline: no free time-stretch of a clip by dragging its edge (clips stretch through tempo sync);
-  consolidating a hard-panned mono clip comes out about 3 dB louder on that side
+- Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
+  stretched clip is limited to ¼×–4× speed and to 40–300 BPM
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
@@ -66,7 +68,8 @@ Known gaps in what's built (planned for later steps):
 ## 2. Transport
 - Play/pause, stop, record
 - Time readout
-- BPM control (scroll wheel, drag, double-click to type)
+- BPM control (scroll wheel, drag, double-click to type): wheel ±1 BPM, Shift ±5; drag up/down,
+  Shift for tenths; arrow keys when focused; each wheel run or drag is one undo step
 - Time signature
 - Metronome
 - Loop toggle
@@ -96,12 +99,21 @@ with or without the track's effects: the result goes on a new audio track below,
 is muted, and the silent tail is trimmed. Fades bend when their handle is dragged up or down;
 double-click the handle to straighten it.
 
+Step 8: Alt+click a clip cuts it there, on the grid unless the magnet is off
+(hold Alt over a clip to see the cut line); if the clip is selected, every selected clip the cut
+runs through is cut. Right-click → Split at the playhead does the same. Shift+drag an audio clip's
+right edge to stretch its audio to the new length without changing pitch (the clip becomes synced
+to the tempo, so it keeps its place in bars). Right-click → Replace audio… swaps the clip's audio
+for another WAV or MP3, keeping its place, gain and fades. Alt+click a fade handle gives a fade of
+exactly one grid step (again: none).
+
 ## 4. Tracks
 - Types: audio, MIDI, drums
 - Add, insert, reorder, duplicate, delete
 - Volume, pan, mute, solo
 - Output routing to the master or a bus
-- Record-arm with input device and channel
+- Record-arm with input device and channel; R with no track armed records on the audio track of
+  the selected clip, else the first audio track, else a new one
 
 ## 5. Recording
 - Mic or line input
@@ -112,7 +124,7 @@ double-click the handle to straighten it.
 - Download takes as WAV
 
 ## 6. Piano roll (MIDI)
-- Tools: draw, erase, select, zoom
+- Tools: draw, brush, erase, select, zoom
 - Note editing:
   - Move, resize
   - Copy/duplicate/paste
@@ -130,6 +142,8 @@ The piano roll has draw, select, erase and zoom tools (D, S, E, Z), and right-cl
 any tool. Shortcuts: Ctrl+A/C/X/V/D, Delete, ↑/↓ semitone, Shift+↑/↓ octave, ←/→ by one grid
 step. Alt places notes off the grid. Click or sweep the keyboard to hear the notes (glissando).
 PAT loops the open clip on its own while the piano roll is shown; SONG plays the project.
+The brush (B, or Shift+drag with the draw tool) paints one note on every step the pointer crosses,
+at the pointer's pitch and the last note length.
 
 ## 7. Drums
 - Pad view: drop a one-shot to assign it
@@ -144,12 +158,16 @@ drop a one-shot from the library or a WAV/MP3 on a pad to use it instead. Kit pr
 Trap, Lo-fi, Latin, Rock) retune the synthesized pads. The step sequencer works in 1/8, 1/16 or
 1/32 steps: click or drag to add steps (Shift for an accent), drag from a filled step or
 right-click to remove, Alt+click to change a step's velocity. The pattern generator (genres:
-Reggaeton, Trap, Trap latino, Hip hop, Lo-fi, Ballad, Corrido tumbado, Rock) writes drums into the
+Reggaeton, Trap, Trap latino, Hip hop, R&B, Lo-fi, Ballad, Corrido tumbado, Rock) writes drums into the
 clip and chords, melody and bass onto MIDI tracks named after them, in a chosen key and major or
 minor; "New variation" makes another take. PAT/SONG works as in the piano roll.
 
 Pads have choke groups (None or 1–4): a hit cuts off the other pads of its group that are still
 ringing, with a 6 ms fade. The closed and open hi-hats are in group 1 in every kit.
+
+"🎲 Kit from library" (step 8) fills the pads with a random combination of one-shots from your
+sample libraries, matched by category and name (kick, 808, snare, clap, rim, closed and open hat,
+crash, ride, tom, cowbell, shaker, conga, perc); press again for another. It's one undo step.
 
 ## 8. Mixer
 - Channel strips
@@ -158,8 +176,7 @@ ringing, with a 6 ms fade. The closed and open hi-hats are in group 1 in every k
 - VU meter and input meter
 
 ## 9. Effects rack
-The rack is built in three batches. The rack and batch 1 were built in phase 3, batch 2 in phase 6;
-batch 3 is still to do.
+The rack and batch 1 were built in phase 3, batches 2 and 3 in phase 6, batch 4 in step 8.
 
 **Rack (phase 3)**
 - Ordered effect chain per track, bus and master: add, remove, drag to reorder
@@ -243,6 +260,32 @@ auto-tune's shifter into new audio that the clip then plays; the clip keeps the 
 the list of moves, so edits can be changed or undone, and the result works with reverse, tempo
 sync, export and saving like any audio clip.
 
+**Batch 4: creative (step 8)**
+| Effect | Parameters |
+|---|---|
+| Crystal | Shift (±12 semitones), splice, feedback, mix; a shimmer whose repeats climb by the shift each time |
+| Tape echo | Sync (free or a note length), time, feedback, warp (wow, flutter and a darker loop), shift (±24 semitones per repeat), mix |
+| Sub booster | Frequency, body (sub lift), drive (harmonics so the sub is heard on small speakers) |
+| Brass enhancer | Body (250 Hz), bite (2.5 kHz), heat (saturation), mix |
+| Vinyl | Wear (narrower band), wobble, noise (surface hiss and crackles), mix |
+
+Crystal and the tape echo run in an AudioWorklet (`creative-dsp.ts`, unit-tested); the others are
+standard nodes. Exports add a tail for both echo effects.
+
+New controls on existing effects (step 8; saved projects load with values that sound as before):
+- Compressor: mode Custom / Glue (soft 30 dB knee) / Punch (hard 6 dB knee), auto gain
+- Reverb: pre-delay synced to the tempo (1/32–1/4), Stereo (off: a mono tail)
+- Saturation: character Tape (soft, symmetric) or Tube (even harmonics)
+- Sidechain duck: Free timing in ms, pump shape Soft / Hard (holds down) / Short
+- Bitcrusher, vibrato, stereo spread: tone (vibrato also mix)
+- Mid/Side: mono bass below a frequency
+- Tilt EQ: output · Tape: separate noise · Opto: release speed · 12-string doubler: bright
+
+Every effect card has a small screen drawing what it does with its current settings: the frequency
+response for filters and EQs, the in/out curve for dynamics and drive, the repeats or tail for
+echoes and reverbs, the movement for modulation. The ∿ button on a card automates any of its
+controls (as right-clicking a knob does), and the card menu inserts an effect before or after it.
+
 ## 10. Automation
 - Lanes for effect knobs, volume and pan
 - Add, move and delete points
@@ -313,6 +356,10 @@ lyrics on the clipboard and .txt downloads them, as "[Verse 1]" headed sections.
 - Automatic "lite" performance mode
 - Fullscreen and mobile layout
 - Shortcuts guide (`?`)
+
+Step 8 added Home (stop and back to the start), L (loop), M (magnet: snap off and back on), B (show
+or hide the library), Alt+L (lyrics), Alt+F (fullscreen), Ctrl + / Ctrl − and Alt + wheel (zoom).
+W stays "write automation"; Home stops.
 
 Built in phase 5. `?` (or "All shortcuts" in the footer, or the View menu) lists every keyboard
 and mouse shortcut by area. The View menu also toggles fullscreen (F) and sets lite mode: Auto,

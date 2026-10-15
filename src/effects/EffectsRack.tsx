@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import type { Effect, EffectType, Id } from '../model/types'
 import {
   addAutomationLane,
@@ -19,7 +19,8 @@ import { toast } from '../ui/toast'
 import { effectTarget } from '../automation/targets'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { Dialog } from '../ui/Dialog'
-import { EFFECTS, EFFECT_TYPES, formatValue, fromNormalized, syncedValue, type ChoiceParam, type NumberParam } from './definitions'
+import { EFFECTS, EFFECT_TYPES, automatableParams, formatValue, fromNormalized, syncedValue, type ChoiceParam, type NumberParam } from './definitions'
+import { effectViz, vizPath } from './viz'
 import { BUILT_IN_PRESETS, deleteUserPreset, saveUserPreset, useUserPresets } from './presets'
 import { engine } from '../audio/engine'
 import { noteName } from '../model/midi'
@@ -51,6 +52,23 @@ const EFFECT_DRAG_TYPE = 'application/x-monkey-daw-effect'
 
 const small = 'rounded border border-line px-2 py-0.5 text-[11px] hover:bg-surface-2 disabled:opacity-40'
 
+/** Adds a lane for an effect parameter and shows it, saying where it is drawn. */
+function automateParam(channel: ChannelRef, effect: Effect, def: NumberParam) {
+  if (def.automatable === false) {
+    toast(`${def.label} can't be automated: changing it rebuilds the sound.`)
+    return
+  }
+  const target = effectTarget(effect.id, def.key)
+  addAutomationLane(channel, target)
+  useViewStore.getState().setAutomationView(channel, target)
+  // Track lanes are drawn over the track; bus and master lanes get a row under the tracks.
+  const { tracks, buses } = useProjectStore.getState().project
+  const track = tracks.find((t) => t.id === channel)
+  const bus = buses.find((b) => b.id === channel)
+  const where = track ? `"${track.name}"` : `the ${bus ? `"${bus.name}"` : 'master'} row under the tracks`
+  toast(`Automating ${def.label} on ${where}: click the lane on the timeline to add points.`)
+}
+
 /**
  * A parameter knob that knows about automation: right-click automates it on the track's
  * timeline; when automated it follows the lane during playback and shows an "A" badge.
@@ -78,7 +96,6 @@ function ParamKnob({
   const target = effectTarget(effect.id, def.key)
   const automated = useAutomatedValue(holder, target)
   const writing = useViewStore((s) => s.automationWrite)
-  const canAutomate = Boolean(holder) && def.automatable !== false
 
   return (
     <Knob
@@ -92,19 +109,7 @@ function ParamKnob({
       automated={automated !== null && !writing}
       onContextMenu={(e) => {
         e.preventDefault()
-        if (!holder) return
-        if (!canAutomate) {
-          toast(`${def.label} can't be automated: changing it rebuilds the sound.`)
-          return
-        }
-        addAutomationLane(channel, target)
-        useViewStore.getState().setAutomationView(channel, target)
-        // Track lanes are drawn over the track; bus and master lanes get a row under the tracks.
-        const { tracks, buses } = useProjectStore.getState().project
-        const track = tracks.find((t) => t.id === channel)
-        const bus = buses.find((b) => b.id === channel)
-        const where = track ? `"${track.name}"` : `the ${bus ? `"${bus.name}"` : 'master'} row under the tracks`
-        toast(`Automating ${def.label} on ${where}: click the lane on the timeline to add points.`)
+        if (holder) automateParam(channel, effect, def)
       }}
     />
   )
@@ -116,12 +121,15 @@ const EffectCard = memo(function EffectCard({
   index,
   count,
   bpm,
+  onInsert,
 }: {
   channel: ChannelRef
   effect: Effect
   index: number
   count: number
   bpm: number
+  /** Opens the effect picker to insert an effect at this chain position. */
+  onInsert: (index: number) => void
 }) {
   const endGesture = useProjectStore((s) => s.endGesture)
   const [dropSide, setDropSide] = useState<'before' | 'after' | null>(null)
@@ -195,12 +203,23 @@ const EffectCard = memo(function EffectCard({
         <h3 className="flex-1 text-xs font-semibold" title={def.description}>
           {def.name}
         </h3>
+        {automatableParams(effect.type).length > 0 && (
+          <Menu
+            label={`Automate a ${def.name} control`}
+            className="rounded px-1.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+            items={automatableParams(effect.type).map((p) => ({ label: `Automate ${p.label}`, onSelect: () => automateParam(channel, effect, p) }))}
+          >
+            <span title="Automate a control of this effect">∿</span>
+          </Menu>
+        )}
         <Menu
           label={`${def.name} options`}
           className="rounded px-1.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
           items={[
             ...(index > 0 ? [{ label: 'Move left', onSelect: () => moveEffect(channel, effect.id, index - 1) }] : []),
             ...(index < count - 1 ? [{ label: 'Move right', onSelect: () => moveEffect(channel, effect.id, index + 1) }] : []),
+            { label: 'Insert effect before', onSelect: () => onInsert(index) },
+            { label: 'Insert effect after', onSelect: () => onInsert(index + 1) },
             { label: 'Remove', onSelect: () => removeEffect(channel, effect.id), danger: true },
           ]}
         >
@@ -208,6 +227,7 @@ const EffectCard = memo(function EffectCard({
         </Menu>
       </header>
 
+      <EffectScreen effect={effect} bpm={bpm} />
       {effect.type === 'autotune' && <TunerReadout channel={channel} effectId={effect.id} />}
       <div className="grid auto-cols-max grid-flow-col grid-rows-2 gap-x-1 gap-y-2">
         {def.params.map((p) => {
@@ -304,11 +324,34 @@ function PresetMenu({ channel, effects, channelName }: { channel: ChannelRef; ef
   )
 }
 
+const SCREEN_W = 160
+const SCREEN_H = 36
+
+/** The card's little screen: the effect's curve with its current settings. */
+function EffectScreen({ effect, bpm }: { effect: Effect; bpm: number }) {
+  const viz = useMemo(() => effectViz(effect, bpm), [effect, bpm])
+  const path = vizPath(viz, SCREEN_W, SCREEN_H)
+  return (
+    <svg
+      viewBox={`0 0 ${SCREEN_W} ${SCREEN_H}`}
+      preserveAspectRatio="none"
+      className={`h-9 w-full rounded border border-line bg-bg ${effect.enabled ? 'text-accent' : 'text-text-dim'}`}
+      aria-hidden
+    >
+      {viz.baseline !== undefined && (
+        <line x1={0} x2={SCREEN_W} y1={viz.baseline * SCREEN_H} y2={viz.baseline * SCREEN_H} stroke="currentColor" strokeOpacity={0.2} strokeDasharray="2 3" />
+      )}
+      <path d={path} fill="none" stroke="currentColor" strokeWidth={viz.bars ? 3 : 1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** The effect chain of one channel: cards in signal order, left to right. */
 const GROUPS = [
   { id: 'essentials', title: 'Essentials' },
   { id: 'character', title: 'Character and space' },
   { id: 'specialist', title: 'Specialist' },
+  { id: 'creative', title: 'Creative' },
 ] as const
 
 /** Every effect, by group, with what it does. */
@@ -339,7 +382,8 @@ function EffectPicker({ onPick, onClose }: { onPick: (type: EffectType) => void;
 }
 
 export function EffectsRack() {
-  const [picking, setPicking] = useState(false)
+  // Where the picked effect goes in the chain (null: the picker is closed).
+  const [picking, setPicking] = useState<number | null>(null)
   const channel = useViewStore((s) => s.rackChannel)
   const openRack = useViewStore((s) => s.openRack)
   const tracks = useProjectStore((s) => s.project.tracks)
@@ -396,23 +440,23 @@ export function EffectsRack() {
       <div className={`flex min-h-0 flex-1 items-start gap-3 overflow-x-auto p-3 ${chain.fxBypass ? 'opacity-50' : ''}`}>
         <div className="self-center text-[11px] text-text-dim">In →</div>
         {chain.effects.map((effect, i) => (
-          <EffectCard key={effect.id} channel={ref} effect={effect} index={i} count={chain.effects.length} bpm={bpm} />
+          <EffectCard key={effect.id} channel={ref} effect={effect} index={i} count={chain.effects.length} bpm={bpm} onInsert={setPicking} />
         ))}
         <div className="flex shrink-0 flex-col items-center gap-2 self-center">
           <button
             className="rounded-lg border border-dashed border-line px-4 py-6 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
-            onClick={() => setPicking(true)}
+            onClick={() => setPicking(chain.effects.length)}
           >
             + Add effect
           </button>
         </div>
-        {picking && (
+        {picking !== null && (
           <EffectPicker
             onPick={(type) => {
-              addEffect(ref, type)
-              setPicking(false)
+              addEffect(ref, type, picking)
+              setPicking(null)
             }}
-            onClose={() => setPicking(false)}
+            onClose={() => setPicking(null)}
           />
         )}
         <div className="self-center text-[11px] text-text-dim">→ {ref === 'master' ? 'Speakers' : 'Pan & fader'}</div>

@@ -2,10 +2,10 @@
 // commits them as one undoable action on release. Listeners live on the window, so a drag keeps
 // working when the clip re-renders in another lane. Escape cancels a gesture.
 
-import { snapTime } from '../model/grid'
+import { secondsPerBeat, snapStep, snapTime } from '../model/grid'
 import { clipRate } from '../model/tempo'
 import { isMidiClip, type Clip, type Project } from '../model/types'
-import { applyClipEdits, moveTrack } from '../state/actions'
+import { applyClipEdits, moveTrack, splitClips } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { seek } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -17,6 +17,7 @@ import {
   setFadeIn,
   setFadeOut,
   setGain,
+  stretchEnd,
   trimEnd,
   trimStart,
   type ClipPlacement,
@@ -108,6 +109,11 @@ const LABELS: Record<ClipHandle, string> = {
   gain: 'Clip gain',
 }
 
+/** Where an Alt+click on a clip cuts it: the pointer's time, on the grid unless the magnet is off. */
+export function razorTime(ctx: GestureContext, clientX: number): number {
+  return snapper(useProjectStore.getState().project, false)(timeAt(ctx, clientX))
+}
+
 export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: ClipHandle, ctx: GestureContext) {
   e.stopPropagation()
   const view = useViewStore.getState()
@@ -132,6 +138,10 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
   const startTrack = trackIndexAt(ctx, e.clientY)
   const x0 = e.clientX
   const y0 = e.clientY
+  // Alt+click on a clip is the razor; Alt+drag still moves it off the grid.
+  const razor = handle === 'body' && e.altKey
+  // Shift+drag on the right edge of an audio clip stretches its audio to the new length.
+  const stretch = handle === 'trim-end' && e.shiftKey && !isMidiClip(clip)
 
   track(
     e,
@@ -148,7 +158,10 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
           preview = only(trimStart(clip, snap(clip.start + dt), trim))
           break
         case 'trim-end':
-          preview = only(trimEnd(clip, snap(clip.start + clip.duration + dt), trim))
+          preview = only(
+            (stretch && stretchEnd(clip, snap(clip.start + clip.duration + dt), project.bpm, trim.rate)) ||
+              trimEnd(clip, snap(clip.start + clip.duration + dt), trim),
+          )
           break
         // Sideways sets the fade's length; up and down bend its curve.
         case 'fade-in':
@@ -166,9 +179,23 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
     (ev, moved) => {
       const preview = useViewStore.getState().preview
       useViewStore.getState().setPreview(null)
+      if (ev && !moved && razor) {
+        // Cuts the clicked clip, and the other selected clips the cut runs through.
+        const at = razorTime(ctx, ev.clientX)
+        const ids = useViewStore.getState().selection.includes(clip.id) ? useViewStore.getState().selection : [clip.id]
+        splitClips(ids, at)
+        return
+      }
+      if (ev && !moved && e.altKey && (handle === 'fade-in' || handle === 'fade-out')) {
+        // Alt+click a fade handle: a fade of exactly one grid step, or back to none.
+        const step = snapStep(project.snap, project.bpm, project.timeSignature) ?? secondsPerBeat(project.bpm, project.timeSignature)
+        const fields = handle === 'fade-in' ? setFadeIn(clip, clip.fadeIn > 0 ? 0 : step) : setFadeOut(clip, clip.fadeOut > 0 ? 0 : step)
+        applyClipEdits(LABELS[handle], [{ clipId: clip.id, trackId: trackIds[own.trackIndex], fields }])
+        return
+      }
       if (!ev || !moved || !preview) return
       const edits = Object.entries(preview).map(([clipId, entry]) => ({ clipId, trackId: entry.trackId, fields: entry.fields }))
-      const label = handle === 'body' && edits.length > 1 ? 'Move clips' : LABELS[handle]
+      const label = stretch ? 'Stretch clip' : handle === 'body' && edits.length > 1 ? 'Move clips' : LABELS[handle]
       applyClipEdits(label, edits)
     },
     handle === 'body' ? 'grabbing' : handle === 'gain' ? 'ns-resize' : 'ew-resize',

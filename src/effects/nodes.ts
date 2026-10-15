@@ -6,11 +6,13 @@
 
 import type { Effect, EffectParams } from '../model/types'
 import { CHARACTER_BUILDERS } from './character'
+import { CREATIVE_BUILDERS } from './creative'
+import creativeWorkletUrl from './creative.worklet.ts?worker&url'
 import { SPECIALIST_BUILDERS } from './specialist'
 import specialistWorkletUrl from './specialist.worklet.ts?worker&url'
 import crusherWorkletUrl from './crusher.worklet.ts?worker&url'
-import { delaySeconds } from './definitions'
-import { dbToGain, reverbImpulse, saturationCurve, seedFromId } from './dsp'
+import { SYNC_DIVISIONS, autoMakeupDb, delaySeconds } from './definitions'
+import { dbToGain, reverbImpulse, saturationCurve, seedFromId, tubeCurve } from './dsp'
 import gateWorkletUrl from './gate.worklet.ts?worker&url'
 import { disconnectAll, dryWet, identity, instance, nyquistSafe, type Binding, type EffectInstance } from './parts'
 
@@ -32,6 +34,7 @@ export function ensureEffectWorklets(ctx: BaseAudioContext): Promise<void> {
       load(gateWorkletUrl, 'Gate'),
       load(crusherWorkletUrl, 'Bitcrusher'),
       load(specialistWorkletUrl, 'Specialist'),
+      load(creativeWorkletUrl, 'Creative'),
     ]).then(() => {})
     loaded.set(ctx, promise)
   }
@@ -80,10 +83,16 @@ function compressor(ctx: BaseAudioContext): EffectInstance {
   const bindings = {
     threshold: [{ param: comp.threshold, map: identity }],
     ratio: [{ param: comp.ratio, map: identity }],
-    knee: [{ param: comp.knee, map: identity }],
+    // Glue and Punch set the knee: soft and smooth, or hard so hits keep their edge.
+    knee: [{ param: comp.knee, map: (v: number, p) => (p.mode === 'glue' ? 30 : p.mode === 'punch' ? 6 : v) }] as Binding[],
     attack: [{ param: comp.attack, map: (ms: number) => ms / 1000 }],
     release: [{ param: comp.release, map: (ms: number) => ms / 1000 }],
-    makeup: [{ param: makeup.gain, map: dbToGain }],
+    makeup: [
+      {
+        param: makeup.gain,
+        map: (db: number, p) => dbToGain(db + (p.autoMakeup === true ? autoMakeupDb(p.threshold as number, p.ratio as number) : 0)),
+      },
+    ] as Binding[],
     mix: dw.mixBindings,
   }
   return instance(ctx, {
@@ -210,15 +219,30 @@ function delay(ctx: BaseAudioContext): EffectInstance {
 
 function reverb(ctx: BaseAudioContext, effect: Effect): EffectInstance {
   const dw = dryWet(ctx)
-  const preDelay = ctx.createDelay(0.25)
+  const preDelay = ctx.createDelay(1)
   const convolver = ctx.createConvolver()
   const damping = ctx.createBiquadFilter()
   damping.type = 'lowpass'
-  dw.input.connect(preDelay).connect(convolver).connect(damping).connect(dw.wet)
+  // With Stereo off the tail is summed to mono, so it sits in the centre behind the sound.
+  const mono = ctx.createGain()
+  mono.channelCount = 1
+  mono.channelCountMode = 'explicit'
+  mono.channelInterpretation = 'speakers'
+  dw.input.connect(preDelay).connect(convolver).connect(damping)
   const seed = seedFromId(effect.id)
   let decay: number | null = null
+  let stereo: boolean | null = null
   const bindings = {
-    preDelay: [{ param: preDelay.delayTime, map: (ms: number) => ms / 1000 }],
+    // A synced pre-delay follows the note length instead of the knob.
+    preDelay: [
+      {
+        param: preDelay.delayTime,
+        map: (ms: number, p, bpm) => {
+          const division = SYNC_DIVISIONS[p.sync as string]
+          return Math.min(1, division ? (division * 60) / bpm : ms / 1000)
+        },
+      },
+    ] as Binding[],
     damping: [{ param: damping.frequency, map: nyquistSafe(ctx) }],
     mix: dw.mixBindings,
   }
@@ -227,6 +251,14 @@ function reverb(ctx: BaseAudioContext, effect: Effect): EffectInstance {
     output: dw.output,
     bindings: () => bindings,
     configure: (p) => {
+      const wide = p.stereo !== false
+      if (wide !== stereo) {
+        stereo = wide
+        damping.disconnect()
+        mono.disconnect()
+        if (wide) damping.connect(dw.wet)
+        else damping.connect(mono).connect(dw.wet)
+      }
       if (p.decay === decay) return
       decay = p.decay as number
       const channels = reverbImpulse(ctx.sampleRate, decay, seed)
@@ -234,7 +266,7 @@ function reverb(ctx: BaseAudioContext, effect: Effect): EffectInstance {
       channels.forEach((data, i) => buffer.copyToChannel(data as Float32Array<ArrayBuffer>, i))
       convolver.buffer = buffer
     },
-    nodes: () => [...dw.nodes, preDelay, convolver, damping],
+    nodes: () => [...dw.nodes, preDelay, convolver, damping, mono],
   })
 }
 
@@ -246,7 +278,7 @@ function saturation(ctx: BaseAudioContext): EffectInstance {
   tone.type = 'lowpass'
   const output = ctx.createGain()
   dw.input.connect(shaper).connect(tone).connect(output).connect(dw.wet)
-  let drive: number | null = null
+  let shape: string | null = null
   const bindings = {
     tone: [{ param: tone.frequency, map: nyquistSafe(ctx) }],
     output: [{ param: output.gain, map: dbToGain }],
@@ -257,9 +289,11 @@ function saturation(ctx: BaseAudioContext): EffectInstance {
     output: dw.output,
     bindings: () => bindings,
     configure: (p) => {
-      if (p.drive === drive) return
-      drive = p.drive as number
-      shaper.curve = saturationCurve(drive) as Float32Array<ArrayBuffer>
+      const next = `${p.character}:${p.drive}`
+      if (next === shape) return
+      shape = next
+      const curve = p.character === 'tube' ? tubeCurve(p.drive as number) : saturationCurve(p.drive as number)
+      shaper.curve = curve as Float32Array<ArrayBuffer>
     },
     nodes: () => [...dw.nodes, shaper, tone, output],
   })
@@ -298,6 +332,7 @@ const BUILDERS: Record<Effect['type'], (ctx: BaseAudioContext, effect: Effect) =
   gate,
   ...CHARACTER_BUILDERS,
   ...SPECIALIST_BUILDERS,
+  ...CREATIVE_BUILDERS,
 }
 
 export function createEffectInstance(ctx: BaseAudioContext, effect: Effect): EffectInstance {

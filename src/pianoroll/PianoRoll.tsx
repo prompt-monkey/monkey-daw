@@ -43,7 +43,8 @@ const yOf = (pitch: number) => (MAX_PITCH - pitch) * KEY_H
 const pitchAtY = (y: number) => clampPitch(MAX_PITCH - Math.floor(y / KEY_H))
 
 const TOOLS: { id: PianoRollTool; label: string; key: string; title: string }[] = [
-  { id: 'draw', label: 'Draw', key: 'd', title: 'Draw notes: click to add, drag to set the length (D)' },
+  { id: 'draw', label: 'Draw', key: 'd', title: 'Draw notes: click to add, drag to set the length; Shift+drag paints (D)' },
+  { id: 'brush', label: 'Brush', key: 'b', title: 'Brush: drag to paint a note on every step, at the last note length (B)' },
   { id: 'select', label: 'Select', key: 's', title: 'Select notes: drag a box, Shift adds (S)' },
   { id: 'erase', label: 'Erase', key: 'e', title: 'Erase notes: click or drag over them (E). Right-click erases with any tool' },
   { id: 'zoom', label: 'Zoom', key: 'z', title: 'Zoom: click to zoom in, Alt+click to zoom out (Z)' },
@@ -494,6 +495,32 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     )
   }
 
+  /** Paints a note on every step the pointer crosses, at the pointer's pitch and the last length. */
+  const brushGesture = (e: React.PointerEvent) => {
+    const step = Math.max(grid, snapBeat(store().lastLength, grid))
+    const painted: Note[] = []
+    const taken = new Set(clip.notes.map((n) => `${n.pitch}:${n.start.toFixed(4)}`))
+    const paint = (ev: { clientX: number; clientY: number }) => {
+      const start = Math.floor(Math.max(0, beatAt(ev.clientX)) / step) * step
+      const pitch = pitchAt(ev.clientY)
+      // One note per step: moving up or down within a step doesn't stack more.
+      if (painted.some((n) => Math.abs(n.start - start) < 1e-6)) return
+      const key = `${pitch}:${start.toFixed(4)}`
+      if (taken.has(key)) return
+      taken.add(key)
+      painted.push(createNote({ pitch, start, length: step, velocity: store().velocity }))
+      audition(track.id, pitch)
+      setDraft([...clip.notes, ...painted])
+    }
+    paint(e)
+    drag(e.nativeEvent, paint, (ev) => {
+      setDraft(null)
+      if (!ev || !painted.length) return
+      commit(painted.length > 1 ? 'Paint notes' : 'Add note', [...clip.notes, ...painted])
+      store().setSelection(painted.map((n) => n.id))
+    })
+  }
+
   const noteGesture = (e: React.PointerEvent, noteId: string, edge: boolean) => {
     const grabbed = clip.notes.find((n) => n.id === noteId)
     if (!grabbed) return
@@ -586,6 +613,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     if (e.button === 2 || tool === 'erase') return eraseGesture(e)
     if (tool === 'zoom') return zoomAt(e.clientX, e.altKey ? 1 / 1.5 : 1.5)
     if (noteEl) return noteGesture(e, noteEl.dataset.noteId!, Boolean((e.target as HTMLElement).closest('[data-edge]')))
+    if (tool === 'brush' || (tool === 'draw' && e.shiftKey)) return brushGesture(e)
     if (tool === 'draw') return drawGesture(e)
     marqueeGesture(e)
   }
@@ -648,7 +676,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     }
   }
 
-  const cursor = tool === 'zoom' ? 'cursor-zoom-in' : tool === 'erase' ? 'cursor-crosshair' : tool === 'draw' ? 'cursor-cell' : 'cursor-default'
+  const cursor = tool === 'zoom' ? 'cursor-zoom-in' : tool === 'erase' ? 'cursor-crosshair' : tool === 'draw' || tool === 'brush' ? 'cursor-cell' : 'cursor-default'
   const bars = Math.ceil(beatsShown / barBeats)
 
   return (

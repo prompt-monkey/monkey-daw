@@ -1,13 +1,32 @@
 import { useState } from 'react'
 import { MAX_PITCH_SHIFT, MAX_SOURCE_BPM, MIN_SOURCE_BPM, detectBpm } from '../model/tempo'
 import { isMidiClip, type Clip, type Id } from '../model/types'
-import { deleteClips, duplicateClips, renameClip, setClipSourceBpm, setClipsPitch, setClipsReversed } from '../state/actions'
+import { engine } from '../audio/engine'
+import { deleteClips, duplicateClips, renameClip, replaceClipAudio, setClipSourceBpm, setClipsPitch, setClipsReversed, splitClips } from '../state/actions'
+import { playheadPosition } from '../state/transport'
 import { toast } from '../ui/toast'
 import { consolidate, convertToAudio } from './bounce'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
 import { ContextMenu, type MenuItem } from '../ui/Menu'
 import { PromptDialog } from '../ui/PromptDialog'
+
+/** Opens the file picker for one WAV or MP3. */
+function pickAudio(onFile: (file: File) => void) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'audio/*,.wav,.mp3'
+  input.onchange = () => input.files?.[0] && onFile(input.files[0])
+  input.click()
+}
+
+async function replaceWith(clipId: Id, file: File) {
+  try {
+    replaceClipAudio(clipId, await engine.assets.importFile(file, engine.context))
+  } catch {
+    toast(`Could not open ${file.name}`, 'error')
+  }
+}
 
 export interface ClipMenuState {
   clip: Clip
@@ -52,6 +71,13 @@ export function ClipMenu({ menu, onClose }: { menu: ClipMenuState | null; onClos
       )
     } else if (!isMidiClip(clip)) {
       list.push({ label: 'Sync to the project tempo…', onSelect: () => setPrompt({ kind: 'tempo', clip }) })
+    }
+    const at = playheadPosition()
+    if (at > clip.start && at < clip.start + clip.duration) {
+      list.push({ label: 'Split at the playhead', onSelect: () => splitClips(ids, at) })
+    }
+    if (!isMidiClip(clip)) {
+      list.push({ label: 'Replace audio…', onSelect: () => pickAudio((file) => replaceWith(clip.id, file)) })
     }
     list.push(
       { label: 'Rename…', onSelect: () => setPrompt({ kind: 'rename', clip }) },

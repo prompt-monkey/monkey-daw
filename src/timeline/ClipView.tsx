@@ -1,7 +1,8 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { peakRange } from '../audio/peaks'
 import { usePeaks } from '../audio/peaksCache'
 import { fadeShape } from '../audio/schedule'
+import { snapTime } from '../model/grid'
 import { beatSeconds } from '../model/midi'
 import { clipRate } from '../model/tempo'
 import { isMidiClip, type Clip, type Note } from '../model/types'
@@ -172,6 +173,15 @@ export const ClipView = memo(function ClipView({
   const fadeInPx = clip.fadeIn * pps
   const fadeOutPx = clip.fadeOut * pps
   const gainY = waveTop + (1 - clip.gain / MAX_CLIP_GAIN) * waveHeight
+  // While Alt is held over the clip, a line shows where a click would cut it.
+  const [razorX, setRazorX] = useState<number | null>(null)
+  const razorAt = (e: React.PointerEvent) => {
+    if (!e.altKey || e.buttons) return setRazorX(null)
+    const { project } = useProjectStore.getState()
+    const t = clip.start + (e.clientX - e.currentTarget.getBoundingClientRect().left) / pps
+    const snapped = snapTime(t, project.snap, project.bpm, project.timeSignature)
+    setRazorX(snapped > clip.start && snapped < clip.start + clip.duration ? (snapped - clip.start) * pps : null)
+  }
 
   const handleDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -183,6 +193,8 @@ export const ClipView = memo(function ClipView({
     <div
       data-clip-id={clip.id}
       onPointerDown={handleDown}
+      onPointerMove={razorAt}
+      onPointerLeave={() => setRazorX(null)}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('[data-handle]')) return
         onOpen?.(clip)
@@ -204,7 +216,7 @@ export const ClipView = memo(function ClipView({
         pitch ? ` · pitch ${pitch > 0 ? '+' : ''}${pitch} semitones` : ''
       }${reversed ? ' · reversed' : ''}${
         isMidiClip(clip) ? ' · double-click to edit the notes' : ''
-      } · right-click for options`}
+      } · Alt+click to cut · right-click for options`}
     >
       {showName && (
         <div className="pointer-events-none flex gap-1 px-1.5 text-[11px] leading-4 font-semibold" style={{ height: NAME_HEIGHT, color }}>
@@ -269,6 +281,8 @@ export const ClipView = memo(function ClipView({
       {/* Trim edges. */}
       <div data-handle="trim-start" className="absolute inset-y-0 left-0 w-1.5 cursor-col-resize hover:bg-text/30" />
       <div data-handle="trim-end" className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize hover:bg-text/30" />
+
+      {razorX !== null && <div className="pointer-events-none absolute inset-y-0 w-px bg-danger" style={{ left: razorX }} />}
 
       {/* Fade handles at the top corners. */}
       <div

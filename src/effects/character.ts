@@ -2,7 +2,7 @@
 // a small graph of built-in nodes (the bitcrusher uses an AudioWorklet), like batch 1.
 
 import type { Effect } from '../model/types'
-import { duckInterval, lfoRate } from './definitions'
+import { duckInterval, duckShape, lfoRate } from './definitions'
 import { DUCK_ATTACK, dbToGain, duckGain, duckPulses, plateImpulse, saturationCurve, seedFromId, seededRandom, softClipCurve } from './dsp'
 import { disconnectAll, dryWet, identity, instance, lfo, nyquistSafe, stereoInput, type Binding, type EffectInstance } from './parts'
 
@@ -166,11 +166,13 @@ export function vibratoSwing(depth: number, rate: number): number {
 }
 
 function vibrato(ctx: BaseAudioContext): EffectInstance {
-  const input = ctx.createGain()
+  const dw = dryWet(ctx)
   const delay = ctx.createDelay(0.05)
   delay.delayTime.value = 0.012
+  const tone = ctx.createBiquadFilter()
+  tone.type = 'lowpass'
   const mod = lfo(ctx)
-  input.connect(delay)
+  dw.input.connect(delay).connect(tone).connect(dw.wet)
   mod.out.connect(delay.delayTime)
   const bindings = {
     rate: [
@@ -178,12 +180,14 @@ function vibrato(ctx: BaseAudioContext): EffectInstance {
       { param: mod.out.gain, map: (r: number, p) => vibratoSwing(p.depth as number, r) },
     ] as Binding[],
     depth: [{ param: mod.out.gain, map: (d: number, p) => vibratoSwing(d, p.rate as number) }] as Binding[],
+    tone: [{ param: tone.frequency, map: nyquistSafe(ctx) }],
+    mix: dw.mixBindings,
   }
   return instance(ctx, {
-    input,
-    output: delay,
+    input: dw.input,
+    output: dw.output,
     bindings: () => bindings,
-    nodes: () => [input, delay, ...mod.nodes],
+    nodes: () => [...dw.nodes, delay, tone, ...mod.nodes],
     dispose: mod.stop,
   })
 }
@@ -225,8 +229,8 @@ function tape(ctx: BaseAudioContext, effect: Effect): EffectInstance {
     flutter: [{ param: flutter.out.gain, map: (f: number) => fraction(f) * 0.0003 }],
     wear: [
       { param: tone.frequency, map: (w: number) => hz(18000 * (4000 / 18000) ** fraction(w)) },
-      { param: hissLevel.gain, map: (w: number) => fraction(w) ** 2 * 0.003 },
     ],
+    noise: [{ param: hissLevel.gain, map: (n: number) => fraction(n) ** 2 * 0.003 }],
     mix: dw.mixBindings,
   }
   return instance(ctx, {
@@ -255,8 +259,10 @@ function bitcrusher(ctx: BaseAudioContext): EffectInstance {
     // Worklet not loaded: pass the signal through rather than breaking the chain.
     node = ctx.createGain()
   }
-  dw.input.connect(node).connect(dw.wet)
-  const bindings: Record<string, Binding[]> = { mix: dw.mixBindings }
+  const tone = ctx.createBiquadFilter()
+  tone.type = 'lowpass'
+  dw.input.connect(node).connect(tone).connect(dw.wet)
+  const bindings: Record<string, Binding[]> = { mix: dw.mixBindings, tone: [{ param: tone.frequency, map: nyquistSafe(ctx) }] }
   if (node instanceof AudioWorkletNode) {
     for (const key of ['bits', 'downsample']) {
       const param = node.parameters.get(key)
@@ -267,7 +273,7 @@ function bitcrusher(ctx: BaseAudioContext): EffectInstance {
     input: dw.input,
     output: dw.output,
     bindings: () => bindings,
-    nodes: () => [...dw.nodes, node],
+    nodes: () => [...dw.nodes, node, tone],
   })
 }
 
@@ -301,8 +307,10 @@ function tilt(ctx: BaseAudioContext): EffectInstance {
   low.type = 'lowshelf'
   const high = ctx.createBiquadFilter()
   high.type = 'highshelf'
-  low.connect(high)
+  const output = ctx.createGain()
+  low.connect(high).connect(output)
   const bindings = {
+    output: [{ param: output.gain, map: dbToGain }],
     tilt: [
       { param: low.gain, map: (t: number) => -t },
       { param: high.gain, map: identity },
@@ -312,7 +320,7 @@ function tilt(ctx: BaseAudioContext): EffectInstance {
       { param: high.frequency, map: identity },
     ],
   }
-  return instance(ctx, { input: low, output: high, bindings: () => bindings, nodes: () => [low, high] })
+  return instance(ctx, { input: low, output, bindings: () => bindings, nodes: () => [low, high, output] })
 }
 
 function air(ctx: BaseAudioContext): EffectInstance {
@@ -343,19 +351,24 @@ function midside(ctx: BaseAudioContext): EffectInstance {
   split.connect(parts[2], 0).connect(side)
   split.connect(parts[3], 1).connect(side)
   const invert = gain(-1)
+  // Mono bass: the sides lose everything below the cutoff, so the lows stay in the centre.
+  const sideLowCut = ctx.createBiquadFilter()
+  sideLowCut.type = 'highpass'
   mid.connect(merge, 0, 0)
   mid.connect(merge, 0, 1)
-  side.connect(merge, 0, 0)
-  side.connect(invert).connect(merge, 0, 1)
+  side.connect(sideLowCut)
+  sideLowCut.connect(merge, 0, 0)
+  sideLowCut.connect(invert).connect(merge, 0, 1)
   const bindings = {
     mid: [{ param: mid.gain, map: dbToGain }],
     side: [{ param: side.gain, map: dbToGain }],
+    bassFreq: [{ param: sideLowCut.frequency, map: (hz: number, p) => (p.monoBass === true ? hz : 10) }] as Binding[],
   }
   return instance(ctx, {
     input,
     output: merge,
     bindings: () => bindings,
-    nodes: () => [input, split, merge, mid, side, invert, ...parts],
+    nodes: () => [input, split, merge, mid, side, sideLowCut, invert, ...parts],
   })
 }
 
@@ -429,7 +442,9 @@ function spread(ctx: BaseAudioContext): EffectInstance {
   const delay = ctx.createDelay(0.05)
   const late = ctx.createGain()
   const rightDry = ctx.createGain()
-  sum.connect(delay).connect(late).connect(merge, 0, 1)
+  const tone = ctx.createBiquadFilter()
+  tone.type = 'lowpass'
+  sum.connect(delay).connect(late).connect(tone).connect(merge, 0, 1)
   split.connect(rightDry, 1).connect(merge, 0, 1)
   split.connect(merge, 0, 0)
   const bindings = {
@@ -438,12 +453,13 @@ function spread(ctx: BaseAudioContext): EffectInstance {
       { param: late.gain, map: fraction },
     ],
     time: [{ param: delay.delayTime, map: toSeconds }],
+    tone: [{ param: tone.frequency, map: nyquistSafe(ctx) }],
   }
   return instance(ctx, {
     input,
     output: merge,
     bindings: () => bindings,
-    nodes: () => [input, split, merge, sum, halfL, halfR, delay, late, rightDry],
+    nodes: () => [input, split, merge, sum, halfL, halfR, delay, late, tone, rightDry],
   })
 }
 
@@ -457,19 +473,19 @@ function duck(ctx: BaseAudioContext): EffectInstance {
     schedule: (window, ctxOffset, params, bpm) => {
       const interval = duckInterval(params, bpm)
       const depth = fraction(params.depth as number)
-      const tau = (fraction(params.release as number) * interval) / 4
+      const { tau, hold } = duckShape(params, interval)
       const g = amp.gain
       const start = Math.max(ctx.currentTime, window.from + ctxOffset)
       if (window.catchUp) {
         g.cancelScheduledValues(start)
         const phase = ((window.from % interval) + interval) % interval
-        g.setValueAtTime(duckGain(phase, depth, tau), start)
+        g.setValueAtTime(duckGain(phase, depth, tau, hold), start)
       }
       for (const t of duckPulses(window.from, window.to, interval)) {
         const at = t + ctxOffset
         if (at < start) continue
         g.setTargetAtTime(1 - depth, at, DUCK_ATTACK / 3)
-        g.setTargetAtTime(1, at + DUCK_ATTACK, tau)
+        g.setTargetAtTime(1, at + DUCK_ATTACK + hold, tau)
       }
     },
     nodes: () => [amp],

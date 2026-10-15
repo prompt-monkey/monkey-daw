@@ -106,16 +106,26 @@ export class OptoCompressor {
   private attack: number
   private fastRelease: number
   private slowRelease: number
+  private speed = 0.5
+  private sampleRate: number
 
   constructor(sampleRate: number) {
+    this.sampleRate = sampleRate
     this.detector = new Envelope(0.002, 0.08, sampleRate)
     this.attack = coefficient(0.01, sampleRate)
     this.fastRelease = coefficient(0.06, sampleRate)
     this.slowRelease = coefficient(1.5, sampleRate)
   }
 
-  /** Gain for one frame; `peakReduction` is 0–1. */
-  gain(level: number, peakReduction: number): number {
+  /** Gain for one frame; `peakReduction` is 0–1, `speed` 0–1 (0.5 is the classic release). */
+  gain(level: number, peakReduction: number, speed = 0.5): number {
+    if (speed !== this.speed) {
+      // Speed scales both release stages: 4× slower at 0, 4× faster at 1.
+      this.speed = speed
+      const scale = 16 ** (0.5 - speed)
+      this.fastRelease = coefficient(0.06 * scale, this.sampleRate)
+      this.slowRelease = coefficient(1.5 * scale, this.sampleRate)
+    }
     const threshold = -6 - 34 * peakReduction
     const db = gainToDb(this.detector.next(level))
     // 3:1 with a 10 dB soft knee.

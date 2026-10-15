@@ -66,6 +66,15 @@ function effectTail(effect: Effect, bpm: number): number {
     const repeats = Math.ceil(Math.log(0.001) / Math.log(feedback))
     return delaySeconds(effect.params, bpm) * Math.max(1, repeats)
   }
+  if (effect.type === 'tapeEcho') {
+    const feedback = Math.max(0.01, (effect.params.feedback as number) / 100)
+    return Math.max(0.05, delaySeconds(effect.params, bpm)) * Math.max(1, Math.ceil(Math.log(0.001) / Math.log(feedback)))
+  }
+  if (effect.type === 'crystal') {
+    // Each repeat is one splice later and quieter by the feedback.
+    const feedback = Math.max(0.01, (effect.params.feedback as number) / 100)
+    return ((effect.params.splice as number) / 1000) * Math.max(2, Math.ceil(Math.log(0.001) / Math.log(feedback)) + 1)
+  }
   return 0
 }
 

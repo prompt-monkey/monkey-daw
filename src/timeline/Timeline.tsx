@@ -273,7 +273,7 @@ export function Timeline() {
     }
     // Ctrl/Cmd + wheel zooms around the pointer; a plain wheel scrolls as usual.
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) return
       e.preventDefault()
       zoomAround(e.clientX, useViewStore.getState().pps * Math.exp(-e.deltaY * 0.0015))
     }

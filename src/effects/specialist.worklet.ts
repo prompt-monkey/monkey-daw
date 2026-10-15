@@ -54,12 +54,13 @@ class OptoProcessor extends AudioWorkletProcessor {
   private comp = new OptoCompressor(sampleRate)
 
   static get parameterDescriptors() {
-    return [kRate('peakReduction', 40, 0, 100)]
+    return [kRate('peakReduction', 40, 0, 100), kRate('speed', 50, 0, 100)]
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: Params) {
     const amount = params.peakReduction[0] / 100
-    return applyGain(inputs, outputs, (level) => this.comp.gain(level, amount))
+    const speed = params.speed[0] / 100
+    return applyGain(inputs, outputs, (level) => this.comp.gain(level, amount, speed))
   }
 }
 

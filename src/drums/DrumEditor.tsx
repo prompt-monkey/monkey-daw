@@ -7,7 +7,9 @@ import { beatSeconds, clipBeatRange, createNote, placeNotes } from '../model/mid
 import type { AssetMeta, DrumPad, MidiClip, Note, Track } from '../model/types'
 import { ClipNameInput, PlaybackModeToggle } from '../pianoroll/shared'
 import { btnClass, segClass, selectClass } from '../pianoroll/styles'
-import { applyClipEdits, applyKitPreset, setClipNotes, setPad, setPadSample } from '../state/actions'
+import { applyClipEdits, applyKitPreset, setClipNotes, setPad, setPadSample, setPadSamples } from '../state/actions'
+import { loadLibrary, useLibraryStore } from '../library/store'
+import { pickLibraryKit } from './libraryKit'
 import { useProjectStore } from '../state/projectStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { toast } from '../ui/toast'
@@ -170,6 +172,7 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
   const bpm = useProjectStore((s) => s.project.bpm)
   const ts = useProjectStore((s) => s.project.timeSignature)
   const [selectedPad, setSelectedPad] = useState(36)
+  const [building, setBuilding] = useState(false)
   const [stepSize, setStepSize] = useState(STEP_SIZES[1])
   const [draft, setDraft] = useState<Note[] | null>(null)
   const [generatorOpen, setGeneratorOpen] = useState(false)
@@ -287,6 +290,25 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
 
   const beatShade = (col: number) => Math.floor(col / stepsPerBeat) % 2 === 1
 
+  const kitFromLibrary = async () => {
+    setBuilding(true)
+    try {
+      if (!useLibraryStore.getState().loaded) await loadLibrary()
+      const picks = pickLibraryKit(useLibraryStore.getState().samples)
+      if (!picks.size) {
+        toast('No drum one-shots found. Import a sample library with kicks, snares, hats… first (Library panel).', 'error')
+        return
+      }
+      const samples = await Promise.all([...picks].map(async ([note, id]) => ({ note, asset: await assetForSample(id) })))
+      setPadSamples(track.id, samples)
+      toast(`Kit from library: ${samples.length} ${samples.length === 1 ? 'pad' : 'pads'} filled`)
+    } catch (err) {
+      toast(`Could not build the kit: ${err instanceof Error ? err.message : 'unknown error'}`, 'error')
+    } finally {
+      setBuilding(false)
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2 py-1 text-[11px]">
@@ -302,6 +324,14 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
             ))}
           </select>
         </label>
+        <button
+          className={btnClass}
+          disabled={building}
+          onClick={() => void kitFromLibrary()}
+          title="Build a new combination from the one-shots in your sample libraries (press again for another)"
+        >
+          {building ? 'Building…' : '🎲 Kit from library'}
+        </button>
         <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Step size">
           {STEP_SIZES.map((s) => (
             <button key={s.label} className={segClass(s === stepSize)} aria-pressed={s === stepSize} onClick={() => setStepSize(s)}>

@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
-import { addBus, clipboardItems, deleteClips, duplicateClips, pasteClips } from '../state/actions'
+import { addBus, clipboardItems, deleteClips, duplicateClips, pasteClips, setLoop, setSnap } from '../state/actions'
 import { toggleRecording } from '../recording/session'
 import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
 import { saveCurrent } from '../storage/session'
-import { playheadPosition, togglePlay } from '../state/transport'
+import { playheadPosition, stop, togglePlay } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { toggleFullscreen } from './shell'
+import type { SnapMode } from '../model/types'
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -20,9 +21,22 @@ function isTyping(target: EventTarget | null): boolean {
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
  * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
  * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome · W write
- * automation · F fullscreen ·
- * ? shortcuts guide
+ * automation · F / Alt+F fullscreen · Home stop and back to the start · L loop · M magnet (snap) ·
+ * B library · Alt+L lyrics · Ctrl + / Ctrl − zoom · ? shortcuts guide
  */
+/** The snap the magnet goes back to when it is turned on again. */
+let lastSnap: SnapMode = 'beat'
+
+/** Turns the magnet off (clips move freely) or back on, to the snap it had before. */
+export function toggleMagnet() {
+  const { snap } = useProjectStore.getState().project
+  if (snap === 'off') setSnap(lastSnap)
+  else {
+    lastSnap = snap
+    setSnap('off')
+  }
+}
+
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,6 +57,30 @@ export function useShortcuts() {
       if (e.code === 'Space' && !mod) {
         handled()
         togglePlay()
+      } else if (key === 'home' && !mod) {
+        handled()
+        stop()
+      } else if (e.altKey && !mod && e.code === 'KeyL') {
+        handled()
+        view.setLyricsOpen(!view.lyricsOpen)
+      } else if (e.altKey && !mod && e.code === 'KeyF') {
+        handled()
+        void toggleFullscreen()
+      } else if (e.altKey) {
+        // Other Alt combinations belong to the browser and to gestures (Alt+drag, Alt+click).
+        return
+      } else if (!mod && key === 'l') {
+        handled()
+        setLoop({ enabled: !project.loop.enabled })
+      } else if (!mod && key === 'm') {
+        handled()
+        toggleMagnet()
+      } else if (!mod && key === 'b') {
+        handled()
+        view.setLibraryOpen(!view.libraryOpen)
+      } else if (mod && (key === '=' || key === '+' || key === '-' || key === '_')) {
+        handled()
+        view.setPps(view.pps * (key === '-' || key === '_' ? 1 / 1.25 : 1.25))
       } else if (!mod && key === 'r') {
         handled()
         toggleRecording()

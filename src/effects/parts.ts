@@ -89,6 +89,26 @@ export function dryWet(ctx: BaseAudioContext, stereo = false) {
   }
 }
 
+/** An AudioWorklet node, or a pass-through gain if the worklet couldn't load. */
+export function workletNode(ctx: BaseAudioContext, name: string): AudioWorkletNode | GainNode {
+  try {
+    return new AudioWorkletNode(ctx, name, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] })
+  } catch {
+    return ctx.createGain()
+  }
+}
+
+/** Bindings for worklet parameters with the same names as the effect's parameters. */
+export function workletBindings(node: AudioWorkletNode | GainNode, keys: string[]): Record<string, Binding[]> {
+  const out: Record<string, Binding[]> = {}
+  if (!(node instanceof AudioWorkletNode)) return out
+  for (const key of keys) {
+    const param = node.parameters.get(key)
+    if (param) out[key] = [{ param, map: identity }]
+  }
+  return out
+}
+
 /** A running oscillator feeding a gain: connect `out` to the AudioParams it should move. */
 export function lfo(ctx: BaseAudioContext, type: OscillatorType = 'sine') {
   const osc = ctx.createOscillator()

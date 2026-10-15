@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import type { Id, Note } from '../model/types'
 
-export type PianoRollTool = 'draw' | 'select' | 'erase' | 'zoom'
+export type PianoRollTool = 'draw' | 'brush' | 'select' | 'erase' | 'zoom'
 
 /** Grid steps in beats (quarter notes). */
 export const GRID_STEPS = [

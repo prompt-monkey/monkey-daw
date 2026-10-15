@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { barBeatAt, formatTime } from '../model/grid'
 import type { SnapMode, SyncMode } from '../model/types'
-import { setBpm, setLoop, setSnap, setSyncMode, setTimeSignature } from '../state/actions'
+import { setLoop, setSnap, setSyncMode, setTimeSignature } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { stop, togglePlay, useTransportStore } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
@@ -12,6 +12,7 @@ import { ExportDialog } from './ExportDialog'
 import { ProjectsDialog } from './ProjectsDialog'
 import { Menu } from './Menu'
 import { NumberField } from './NumberField'
+import { TempoControl } from './TempoControl'
 import { setLitePreference, toggleFullscreen, useShellStore, type LitePreference } from './shell'
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
@@ -70,7 +71,6 @@ function ProjectControls({ menu }: { menu?: React.ReactNode }) {
 
 export function TransportBar() {
   const playing = useTransportStore((s) => s.playing)
-  const bpm = useProjectStore((s) => s.project.bpm)
   const ts = useProjectStore((s) => s.project.timeSignature)
   const snap = useProjectStore((s) => s.project.snap)
   const syncMode = useProjectStore((s) => s.project.syncMode)
@@ -79,7 +79,7 @@ export function TransportBar() {
   const canRedo = useProjectStore((s) => s.history.future.length > 0)
   const undoLabel = useProjectStore((s) => s.history.past.at(-1)?.label)
   const redoLabel = useProjectStore((s) => s.history.future[0]?.label)
-  const { undo, redo, endGesture } = useProjectStore.getState()
+  const { undo, redo } = useProjectStore.getState()
   const [exportOpen, setExportOpen] = useState(false)
   const mixerOpen = useViewStore((s) => s.mixerOpen)
   const setMixerOpen = useViewStore((s) => s.setMixerOpen)
@@ -164,16 +164,7 @@ export function TransportBar() {
 
       <div className="flex items-center gap-2 text-sm text-text-dim" title="Tempo in BPM">
         {narrow ? '♩' : 'BPM'}
-        <NumberField
-          label="Tempo in BPM"
-          value={bpm}
-          min={20}
-          onCommit={(v) => {
-            setBpm(v)
-            endGesture()
-          }}
-          className="w-16"
-        />
+        <TempoControl className="w-16" />
         {!narrow && (
           <select
             value={syncMode}

@@ -237,6 +237,12 @@ export type EffectType =
   | 'doubler'
   | 'amp'
   | 'autotune'
+  // Batch 4: creative.
+  | 'crystal'
+  | 'tapeEcho'
+  | 'subBoost'
+  | 'brass'
+  | 'vinyl'
 
 /** Parameter values: numbers in real units (Hz, dB, ms…), choices as strings, toggles as booleans. */
 export type EffectParams = Record<string, number | string | boolean>

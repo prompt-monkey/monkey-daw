@@ -1,6 +1,7 @@
 // Pure clip-editing math used by timeline gestures. Every function returns the changed clip
 // fields; the drag controller previews them and commits them as one undoable action.
 
+import { MAX_SOURCE_BPM, MIN_SOURCE_BPM } from '../model/tempo'
 import type { Clip, Id, Track, TrackKind } from '../model/types'
 
 /** Shortest clip a trim can produce, in seconds. */
@@ -136,4 +137,60 @@ export function formatGain(gain: number): string {
   if (gain <= 0.0001) return '-inf dB'
   const db = 20 * Math.log10(gain)
   return `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`
+}
+
+/**
+ * Cuts a clip in two at timeline time `at`: the left part keeps the fade-in, the right part the
+ * fade-out. Note clips keep the notes that start in each part (note times stay relative to the
+ * content's start, so they don't move). Returns null when `at` isn't inside the clip.
+ */
+export function splitClip(clip: Clip, at: number, { rate = 1, reversed = false }: Pick<TrimContext, 'rate' | 'reversed'> = {}, bpm = 120): [Partial<Clip>, Clip] | null {
+  const leftDuration = at - clip.start
+  const rightDuration = clip.start + clip.duration - at
+  if (leftDuration < MIN_CLIP_DURATION || rightDuration < MIN_CLIP_DURATION) return null
+  const left: Partial<Clip> = { duration: leftDuration, fadeIn: Math.min(clip.fadeIn, leftDuration), fadeOut: 0, fadeOutCurve: undefined }
+  // Backwards, the left part plays the end of the window: its offset moves, the right part's stays.
+  if (reversed) left.offset = clip.offset + rightDuration * rate
+  const right = {
+    ...clip,
+    start: at,
+    duration: rightDuration,
+    offset: reversed ? clip.offset : clip.offset + leftDuration * rate,
+    fadeIn: 0,
+    fadeInCurve: undefined,
+    fadeOut: Math.min(clip.fadeOut, rightDuration),
+  } as Clip
+  if ('notes' in clip) {
+    // The cut in beats from the content's start (the clip start minus its offset).
+    const cut = (at - clip.start + clip.offset) / (60 / bpm)
+    ;(left as Partial<typeof clip>).notes = clip.notes.filter((n) => n.start < cut - 1e-9)
+    ;(right as typeof clip).notes = clip.notes.filter((n) => n.start >= cut - 1e-9)
+  }
+  return [left, right]
+}
+
+/** The slowest and fastest a clip can be stretched to, relative to its audio's own speed. */
+export const STRETCH_LIMITS = { min: 0.25, max: 4 }
+
+/**
+ * Moves an audio clip's right edge by stretching its audio to fit, without changing pitch: the
+ * same audio plays over the new length (it becomes synced to the tempo, so it stays in bars).
+ * Returns null for note clips.
+ */
+export function stretchEnd(clip: Clip, newEnd: number, bpm: number, rate = 1): Partial<Clip> | null {
+  if ('notes' in clip) return null
+  // How much audio the clip plays now; the new rate plays that much over the new length.
+  const audio = clip.duration * rate
+  // Within the stretch limits, and within the tempos a synced clip can have (sourceBpm = bpm ×
+  // duration ÷ audio).
+  const minDuration = Math.max(audio / STRETCH_LIMITS.max, (audio * MIN_SOURCE_BPM) / bpm)
+  const maxDuration = Math.min(audio / STRETCH_LIMITS.min, (audio * MAX_SOURCE_BPM) / bpm)
+  const duration = Math.min(maxDuration, Math.max(Math.max(MIN_CLIP_DURATION, minDuration), newEnd - clip.start))
+  const k = duration / clip.duration
+  return {
+    duration,
+    sourceBpm: bpm / (audio / duration),
+    fadeIn: clip.fadeIn * k,
+    fadeOut: clip.fadeOut * k,
+  }
 }

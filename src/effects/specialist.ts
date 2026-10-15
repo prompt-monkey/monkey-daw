@@ -4,29 +4,9 @@
 import type { Effect } from '../model/types'
 import { dbToGain } from './dsp'
 import { SCALE_KEYS } from './specialist-dsp'
-import { dryWet, identity, instance, nyquistSafe, type Binding, type EffectInstance } from './parts'
+import { dryWet, identity, instance, nyquistSafe, workletBindings, workletNode, type EffectInstance } from './parts'
 
 type Builder = (ctx: BaseAudioContext, effect: Effect) => EffectInstance
-
-/** An AudioWorklet node, or a pass-through gain if the worklet couldn't load. */
-function workletNode(ctx: BaseAudioContext, name: string): AudioWorkletNode | GainNode {
-  try {
-    return new AudioWorkletNode(ctx, name, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] })
-  } catch {
-    return ctx.createGain()
-  }
-}
-
-/** Bindings for worklet parameters with the same names as the effect's parameters. */
-function workletBindings(node: AudioWorkletNode | GainNode, keys: string[]): Record<string, Binding[]> {
-  const out: Record<string, Binding[]> = {}
-  if (!(node instanceof AudioWorkletNode)) return out
-  for (const key of keys) {
-    const param = node.parameters.get(key)
-    if (param) out[key] = [{ param, map: identity }]
-  }
-  return out
-}
 
 function transient(ctx: BaseAudioContext): EffectInstance {
   const node = workletNode(ctx, 'monkey-daw-transient')
@@ -49,7 +29,7 @@ function opto(ctx: BaseAudioContext): EffectInstance {
   const makeup = ctx.createGain()
   dw.input.connect(node).connect(makeup).connect(dw.wet)
   const bindings = {
-    ...workletBindings(node, ['peakReduction']),
+    ...workletBindings(node, ['peakReduction', 'speed']),
     gain: [{ param: makeup.gain, map: dbToGain }],
     mix: dw.mixBindings,
   }
@@ -59,9 +39,17 @@ function opto(ctx: BaseAudioContext): EffectInstance {
 function doubler(ctx: BaseAudioContext): EffectInstance {
   const dw = dryWet(ctx)
   const node = workletNode(ctx, 'monkey-daw-doubler')
-  dw.input.connect(node).connect(dw.wet)
-  const bindings = { ...workletBindings(node, ['octave', 'detune', 'spread']), mix: dw.mixBindings }
-  return instance(ctx, { input: dw.input, output: dw.output, bindings: () => bindings, nodes: () => [...dw.nodes, node] })
+  // Bright: a top-end lift on the doubled strings only, for the jangle of a real 12-string.
+  const bright = ctx.createBiquadFilter()
+  bright.type = 'highshelf'
+  bright.frequency.value = 3000
+  dw.input.connect(node).connect(bright).connect(dw.wet)
+  const bindings = {
+    ...workletBindings(node, ['octave', 'detune', 'spread']),
+    bright: [{ param: bright.gain, map: identity }],
+    mix: dw.mixBindings,
+  }
+  return instance(ctx, { input: dw.input, output: dw.output, bindings: () => bindings, nodes: () => [...dw.nodes, node, bright] })
 }
 
 /**

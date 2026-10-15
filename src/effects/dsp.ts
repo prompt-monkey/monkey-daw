@@ -51,6 +51,16 @@ export function saturationCurve(driveDb: number, size = 4096): Float32Array {
   return curve
 }
 
+/** Tube-style curve: asymmetric tanh (it bends earlier on one side), which adds even harmonics. */
+export function tubeCurve(driveDb: number, size = 4096): Float32Array {
+  const k = 10 ** (driveDb / 20)
+  // The bias shrinks as the drive grows, so the two sides stay within about 3 dB of each other.
+  const bias = 0.15 / k
+  const shape = (x: number) => Math.tanh(k * (x + bias)) - Math.tanh(k * bias)
+  const norm = Math.max(Math.abs(shape(1)), Math.abs(shape(-1)))
+  return Float32Array.from({ length: size }, (_, i) => shape((i / (size - 1)) * 2 - 1) / norm)
+}
+
 /** Equal-power dry/wet gains for a mix amount 0–1 (no level dip in the middle). */
 export function mixGains(mix: number): { dry: number; wet: number } {
   const m = Math.min(1, Math.max(0, mix))
@@ -109,12 +119,12 @@ export const DUCK_ATTACK = 0.006
 
 /**
  * Gain of the sidechain duck `phase` seconds after a pulse: it drops to 1 − depth, then recovers
- * toward 1 with time constant `tau`.
+ * toward 1 with time constant `tau`, after staying down for `hold` seconds.
  */
-export function duckGain(phase: number, depth: number, tau: number): number {
+export function duckGain(phase: number, depth: number, tau: number, hold = 0): number {
   const floor = 1 - Math.min(1, Math.max(0, depth))
-  if (phase < DUCK_ATTACK) return floor
-  return 1 - (1 - floor) * Math.exp(-(phase - DUCK_ATTACK) / Math.max(1e-4, tau))
+  if (phase < DUCK_ATTACK + hold) return floor
+  return 1 - (1 - floor) * Math.exp(-(phase - DUCK_ATTACK - hold) / Math.max(1e-4, tau))
 }
 
 /** Pulse times (multiples of `interval` from timeline 0) in [from, to). */

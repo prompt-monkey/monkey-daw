@@ -10,7 +10,7 @@
 import type { Note, SynthPreset } from '../model/types'
 import { NOTE } from './kits'
 
-export type GenreId = 'reggaeton' | 'trap' | 'trap-latino' | 'hiphop' | 'lofi' | 'ballad' | 'corrido' | 'rock'
+export type GenreId = 'reggaeton' | 'trap' | 'trap-latino' | 'hiphop' | 'rnb' | 'lofi' | 'ballad' | 'corrido' | 'rock'
 export type GeneratedNote = Omit<Note, 'id'>
 export type Scale = 'major' | 'minor'
 
@@ -96,6 +96,23 @@ export const GENRES: Record<GenreId, Genre> = {
     progressions: { major: [[0, 3, 1, 4], [0, 5, 1, 4]], minor: [[0, 3, 6, 4], [0, 5, 3, 4]] },
     bass: 'r------r-r----f-',
     melody: { density: 0.3, instrument: 'keys' },
+  },
+  rnb: {
+    label: 'R&B',
+    tempo: 72,
+    swing: 0.12,
+    // Laid back: a syncopated kick, snare on 2 and 4 with a clap layer, busy soft hats and rim ghosts.
+    drums: {
+      [NOTE.kick]: 'X-----x---x--?--',
+      [NOTE.snare]: '----X-------X---',
+      [NOTE.clap]: '----?-------x---',
+      [NOTE.hat]: 'x-o-x-ogx-o-x-og',
+      [NOTE.rim]: '-------g------g-',
+    },
+    chords: { rhythm: 'x-------x--x----', instrument: 'keys', seventh: true },
+    progressions: { major: [[0, 5, 1, 4], [3, 2, 1, 4], [0, 3, 2, 5]], minor: [[0, 5, 3, 4], [0, 3, 6, 5], [5, 4, 0, 6]] },
+    bass: 'r-----r---f--o--',
+    melody: { density: 0.35, instrument: 'keys' },
   },
   lofi: {
     label: 'Lo-fi',

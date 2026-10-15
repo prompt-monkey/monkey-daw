@@ -5,7 +5,8 @@ import { engine } from '../audio/engine'
 import { downloadBlob } from '../audio/export'
 import { secondsPerBar } from '../model/grid'
 import type { Id } from '../model/types'
-import { addAudioClip } from '../state/actions'
+import { addAudioClip, addTrack } from '../state/actions'
+import { useViewStore } from '../state/viewStore'
 import { useProjectStore } from '../state/projectStore'
 import { pause, useTransportStore } from '../state/transport'
 import { toast } from '../ui/toast'
@@ -99,14 +100,26 @@ export async function changeInputDevice(deviceId: string | null) {
   if (useRecordingStore.getState().inputOpen) await openInput()
 }
 
+/**
+ * The track to record on when none is armed: the audio track of the selected clip, else the first
+ * audio track, else a new one.
+ */
+export function pickRecordTrack(): Id {
+  const { tracks } = useProjectStore.getState().project
+  const selected = useViewStore.getState().selection
+  const audio = tracks.filter((t) => t.kind === 'audio')
+  const withSelection = audio.find((t) => t.clips.some((c) => selected.includes(c.id)))
+  return (withSelection ?? audio[0])?.id ?? addTrack(undefined, 'audio')
+}
+
 export async function startRecording() {
-  const { armedTrackId, status, prefs } = useRecordingStore.getState()
+  const { status, prefs } = useRecordingStore.getState()
   if (status !== 'idle') return
-  const track = useProjectStore.getState().project.tracks.find((t) => t.id === armedTrackId)
-  if (!track) {
-    toast('Arm a track first: press its ● button, then record.', 'error')
-    return
+  if (!useProjectStore.getState().project.tracks.some((t) => t.id === useRecordingStore.getState().armedTrackId)) {
+    useRecordingStore.setState({ armedTrackId: pickRecordTrack() })
   }
+  const track = useProjectStore.getState().project.tracks.find((t) => t.id === useRecordingStore.getState().armedTrackId)
+  if (!track) return
   if (!useRecordingStore.getState().inputOpen && !(await openInput())) return
 
   const { bpm, timeSignature } = useProjectStore.getState().project

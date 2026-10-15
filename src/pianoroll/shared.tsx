@@ -1,7 +1,8 @@
 // Controls shared by the piano roll and the drum editor.
 
 import type { MidiClip } from '../model/types'
-import { renameClip } from '../state/actions'
+import { renameClip, setClipSwing } from '../state/actions'
+import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
 import { segClass } from './styles'
 
@@ -15,6 +16,40 @@ export function ClipNameInput({ clip }: { clip: MidiClip }) {
       aria-label="Clip name"
       className="w-28 truncate rounded bg-transparent px-1 font-semibold hover:bg-surface-2 focus:bg-bg"
     />
+  )
+}
+
+/**
+ * The clip's swing: every second sixteenth plays later, up to a triplet feel at 100%. The notes
+ * stay on the grid; double-click goes back to straight.
+ */
+export function SwingControl({ clip }: { clip: MidiClip }) {
+  const endGesture = useProjectStore((s) => s.endGesture)
+  const swing = clip.swing ?? 0
+  return (
+    <label
+      className="flex items-center gap-1 text-text-dim"
+      title="Swing: every second sixteenth plays later, up to a triplet feel at 100% · double-click for straight"
+    >
+      Swing
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={swing}
+        onChange={(e) => setClipSwing(clip.id, Number(e.target.value))}
+        onPointerUp={endGesture}
+        onKeyUp={endGesture}
+        onDoubleClick={() => {
+          setClipSwing(clip.id, 0)
+          endGesture()
+        }}
+        aria-label="Swing"
+        className="w-16"
+      />
+      <span className="w-8 font-mono text-text">{swing}%</span>
+    </label>
   )
 }
 

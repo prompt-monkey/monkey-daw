@@ -8,7 +8,7 @@ import type { MidiClip } from '../model/types'
 import { addMidiClip, addTrack, applyKitPreset, applyPattern, setPad, setPadSample } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { moveClips } from '../timeline/edits'
-import { GENRES, generatePattern, random, type GenreId } from './generator'
+import { GENRES, barPattern, generatePattern, meterLayout, random, type GenreId } from './generator'
 import { KIT_PRESETS, NOTE, PADS, createKit } from './kits'
 
 const project = () => useProjectStore.getState().project
@@ -206,8 +206,36 @@ describe('generatePattern', () => {
   })
 
   it('fits shorter bars (3/4: 12 steps)', () => {
-    const g = generatePattern(opts, 2, 12)
-    expect([...g.drums, ...g.melody].every((n) => n.start < 6)).toBe(true)
+    const g = generatePattern(opts, 2, { beats: 3, unit: 4 })
+    expect([...g.drums, ...g.melody, ...g.chords, ...g.bass].every((n) => n.start < 6)).toBe(true)
+  })
+
+  it('lays out each time signature from the 4/4 groove', () => {
+    expect(meterLayout({ beats: 3, unit: 4 })).toMatchObject({ steps: 12, pulse: 4, compound: false, sources: [0, 1, 3] })
+    expect(meterLayout({ beats: 2, unit: 4 })).toMatchObject({ steps: 8, sources: [0, 1] })
+    expect(meterLayout({ beats: 6, unit: 8 })).toMatchObject({ steps: 12, pulse: 6, compound: true, sources: [0, 1] })
+    // 3/4 plays beats 1, 2 and 4: a backbeat on 2 and the snare of beat 4 on the last beat.
+    const snare = '----X-------X---'
+    expect(barPattern(snare, meterLayout({ beats: 3, unit: 4 }))).toBe('----X---X---')
+    // 6/8: two pulses of three eighths; the kick on the first, the snare on the second.
+    expect(barPattern('X---------------', meterLayout({ beats: 6, unit: 8 }))).toBe('X-----------')
+    expect(barPattern(snare, meterLayout({ beats: 6, unit: 8 }))).toBe('------X-----')
+    // Eighth-note hats fill the three eighths of each pulse.
+    expect(barPattern('x-x-x-x-x-x-x-x-', meterLayout({ beats: 6, unit: 8 }))).toBe('x-x-x-x-x-x-')
+  })
+
+  it('puts 6/8 hits on eighths, with the backbeat on the second pulse', () => {
+    const g = generatePattern({ ...opts, genre: 'ballad' }, 1, { beats: 6, unit: 8 })
+    expect(g.drums.every((n) => n.start < 3 && Math.abs((n.start / 0.5) % 1) < 1e-9)).toBe(true)
+    expect(g.drums.filter((n) => n.pitch === NOTE.snare).map((n) => n.start)).toContain(1.5)
+    expect(g.swing).toBe(0)
+  })
+
+  it('writes straight notes and gives the genre swing to the clips', () => {
+    const g = generatePattern({ ...opts, genre: 'lofi' }, 2)
+    expect(g.swing).toBe(75)
+    expect([...g.drums, ...g.melody].every((n) => Math.abs((n.start / 0.25) % 1) < 1e-9 || Math.abs((n.start / 0.125) % 1) < 1e-9)).toBe(true)
+    expect(generatePattern({ ...opts, genre: 'reggaeton' }, 1).swing).toBe(0)
   })
 
   it('gives seeded random numbers between 0 and 1', () => {

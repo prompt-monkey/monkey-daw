@@ -1,13 +1,14 @@
 // Pattern generator: drums, chords, bass and a melody for a genre, in a key. Everything is
 // derived from a seed, so "New variation" is just another seed and results are repeatable.
 //
-// Patterns are written per 16-step bar (sixteenth notes). Drum cells:
+// Patterns are written for a 16-step bar of 4/4 (sixteenth notes); other time signatures are laid
+// out from them beat by beat (see meterLayout). Drum cells:
 //   X accent · x hit · o soft · ? hit half the time · g ghost note now and then
 //   r hit, sometimes doubled into a 1/32 roll · - rest
 // Bass cells: r root · f fifth · o octave · ? root half the time · - rest.
 // Chord and melody rhythms: x starts a chord; melody density is the chance of a note per 1/8.
 
-import type { Note, SynthPreset } from '../model/types'
+import type { Note, SynthPreset, TimeSignature } from '../model/types'
 import { NOTE } from './kits'
 
 export type GenreId = 'reggaeton' | 'trap' | 'trap-latino' | 'hiphop' | 'rnb' | 'lofi' | 'ballad' | 'corrido' | 'rock'
@@ -18,7 +19,7 @@ interface Genre {
   label: string
   /** A typical tempo, shown as a hint. */
   tempo: number
-  /** Delay of every second sixteenth, as a fraction of a sixteenth. */
+  /** Delay of every second sixteenth, as a fraction of a sixteenth (set as the clips' swing). */
   swing: number
   drums: Partial<Record<number, string>>
   /** Crash on the first beat. */
@@ -206,18 +207,76 @@ export interface GeneratedPattern {
   chords: GeneratedNote[]
   melody: GeneratedNote[]
   bass: GeneratedNote[]
+  /** Swing (0–100) for the clips the notes go in: the notes themselves are straight. */
+  swing: number
 }
 
 const STEP = 0.25
 const mod = (n: number, m: number) => ((n % m) + m) % m
 
-export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBar = 16): GeneratedPattern {
+/** How a bar of a time signature is laid out in sixteenths. */
+export interface MeterLayout {
+  /** Sixteenths in the bar. */
+  steps: number
+  /** Sixteenths per beat: 4 for x/4, 6 for the dotted-quarter pulse of 6/8 and 12/8. */
+  pulse: number
+  /** 6/8, 9/8, 12/8: beats of three eighths. */
+  compound: boolean
+  /** For each beat of the bar, the beat (0–3) of the 4/4 patterns it plays. */
+  sources: number[]
+}
+
+/**
+ * Which beat of a 4/4 groove each beat of a bar plays: the first ones in order, and the bar's last
+ * beat from beat 4, where fills and pick-ups sit (3/4: 1, 2, 4; 2/4: 1, 2).
+ */
+export function sourceBeats(count: number): number[] {
+  if (count <= 1) return [0]
+  if (count === 2) return [0, 1]
+  if (count === 3) return [0, 1, 3]
+  return Array.from({ length: count }, (_, i) => (i === count - 1 ? 3 : i < 3 ? i : 1 + ((i - 1) % 2)))
+}
+
+export function meterLayout(ts: TimeSignature): MeterLayout {
+  const compound = ts.unit === 8 && ts.beats % 3 === 0 && ts.beats >= 6
+  const steps = Math.max(1, Math.round((ts.beats * 16) / ts.unit))
+  const pulse = compound ? 6 : Math.max(1, Math.round(16 / ts.unit))
+  return { steps, pulse, compound, sources: sourceBeats(Math.max(1, Math.round(steps / pulse))) }
+}
+
+/** One beat of a 4/4 pattern (four sixteenths) fitted to a beat of `pulse` sixteenths. */
+function fitBeat(cells: string[], pulse: number): string[] {
+  if (pulse === 4) return cells
+  const [a, b, c, d] = cells
+  // Three eighths: the downbeat, then the next hit of the beat for each following eighth.
+  if (pulse === 6) return [a, '-', b !== '-' ? b : c, '-', c !== '-' ? c : d, '-']
+  if (pulse === 2) return [a, c]
+  return Array.from({ length: pulse }, (_, j) => cells[Math.floor((j * 4) / pulse)])
+}
+
+/** A 4/4 pattern laid out as one bar of the meter. */
+export function barPattern(pattern: string, layout: MeterLayout): string {
+  const out: string[] = []
+  for (const source of layout.sources) {
+    const cells = Array.from({ length: 4 }, (_, i) => pattern[source * 4 + i] ?? '-')
+    out.push(...fitBeat(cells, layout.pulse))
+  }
+  return out.join('').padEnd(layout.steps, '-').slice(0, layout.steps)
+}
+
+export function generatePattern(opts: GeneratorOptions, bars: number, meter: TimeSignature = { beats: 4, unit: 4 }): GeneratedPattern {
   const genre = GENRES[opts.genre]
   const rand = random(opts.seed)
   const scale = SCALES[opts.scale]
+  const layout = meterLayout(meter)
+  const stepsPerBar = layout.steps
   const barBeats = stepsPerBar * STEP
-  const cell = (pattern: string, step: number) => pattern[step % 16] ?? '-'
-  const swingAt = (step: number) => (step % 2 === 1 ? genre.swing * STEP : 0)
+  const laidOut = new Map<string, string>()
+  const cell = (pattern: string, step: number) => {
+    let bar = laidOut.get(pattern)
+    if (bar === undefined) laidOut.set(pattern, (bar = barPattern(pattern, layout)))
+    return bar[step % stepsPerBar] ?? '-'
+  }
   /** Pitch of a scale degree (any integer; 7 is the root an octave up) above `base`. */
   const degreePitch = (degree: number, base: number) => base + opts.key + scale[mod(degree, 7)] + 12 * Math.floor(degree / 7)
 
@@ -225,10 +284,12 @@ export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBa
   const drums: GeneratedNote[] = []
   const hit = (note: number, start: number, velocity: number) => drums.push({ pitch: note, start, length: STEP, velocity })
   const fillBar = genre.fill && rand() < 0.6 ? bars - 1 : -1
+  // The fill takes the bar's last beat.
+  const fillSteps = Math.min(stepsPerBar, layout.pulse)
   for (let bar = 0; bar < bars; bar++) {
     for (let step = 0; step < stepsPerBar; step++) {
-      const at = bar * barBeats + step * STEP + swingAt(step)
-      const inFill = bar === fillBar && step >= stepsPerBar - 4
+      const at = bar * barBeats + step * STEP
+      const inFill = bar === fillBar && step >= stepsPerBar - fillSteps
       for (const [noteKey, pattern] of Object.entries(genre.drums)) {
         const note = Number(noteKey)
         if (inFill && note !== NOTE.kick) continue
@@ -245,7 +306,7 @@ export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBa
       }
       if (inFill) {
         const toms = [NOTE.snare, NOTE.tomHigh, NOTE.tomMid, NOTE.tomLow]
-        hit(toms[Math.min(3, Math.floor(((step - (stepsPerBar - 4)) / 4) * 4 + rand() * 1.5))], at, 0.85)
+        hit(toms[Math.min(3, Math.floor(((step - (stepsPerBar - fillSteps)) / fillSteps) * 4 + rand() * 1.5))], at, 0.85)
       }
     }
   }
@@ -293,7 +354,7 @@ export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBa
   for (let bar = 0; bar < bars; bar++) {
     const root = chordRoot(bar)
     for (let step = 0; step < stepsPerBar; step += 2) {
-      const onBeat = step % 4 === 0
+      const onBeat = step % layout.pulse === 0
       if (rand() >= genre.melody.density * (onBeat ? 1.3 : 0.8)) continue
       if (onBeat) {
         // Nearest chord tone to where the line is.
@@ -302,7 +363,7 @@ export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBa
       } else {
         degree = Math.min(15, Math.max(5, degree + [-2, -1, -1, 1, 1, 2][Math.floor(rand() * 6)]))
       }
-      starts.push({ start: bar * barBeats + step * STEP + swingAt(step), degree })
+      starts.push({ start: bar * barBeats + step * STEP, degree })
     }
   }
   starts.forEach(({ start, degree: d }, i) => {
@@ -310,5 +371,6 @@ export function generatePattern(opts: GeneratorOptions, bars: number, stepsPerBa
     melody.push({ pitch: degreePitch(d, 48), start, length: Math.min(1, Math.max(0.5, next - start)) - 0.05, velocity: 0.7 + rand() * 0.25 })
   })
 
-  return { drums, chords, melody, bass }
+  // A compound meter already swings in threes; elsewhere the genre's swing goes on the clips.
+  return { drums, chords, melody, bass, swing: layout.compound ? 0 : Math.round(genre.swing * 300) }
 }

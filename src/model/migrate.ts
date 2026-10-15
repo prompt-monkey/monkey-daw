@@ -83,8 +83,12 @@ function normalizeClip(raw: Loose<Clip>): Clip | null {
   if (typeof raw.id !== 'string' || (typeof assetId !== 'string' && !Array.isArray(notes))) return null
   const duration = num(raw.duration, 0)
   if (duration <= 0) return null
+  const swing = (raw as Loose<MidiClip>).swing
   const content = Array.isArray(notes)
-    ? { notes: sortNotes(notes.map((n) => normalizeNote(n as Loose<Note>)).filter((n) => n !== null)) }
+    ? {
+        notes: sortNotes(notes.map((n) => normalizeNote(n as Loose<Note>)).filter((n) => n !== null)),
+        ...(typeof swing === 'number' && Number.isFinite(swing) && swing > 0 ? { swing: Math.min(100, swing) } : {}),
+      }
     : { assetId: assetId as string, ...(validBpm(sourceBpm) ? { sourceBpm } : {}) }
   return {
     id: raw.id,

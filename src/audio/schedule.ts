@@ -1,7 +1,7 @@
 // Pure scheduling logic shared by live playback and offline rendering: which clips sound in a
 // window of timeline time, and with what gain envelope. No Web Audio calls in this file.
 
-import { beatSeconds } from '../model/midi'
+import { beatSeconds, swingDelay } from '../model/midi'
 import { clipPlayback } from '../model/tempo'
 import { isMidiClip, type AudioClip, type Clip, type Id, type LoopRegion, type Project, type Track } from '../model/types'
 
@@ -108,6 +108,8 @@ export function noteEvents(project: Project, w: ScheduleWindow): NoteEvent[] {
       const origin = clip.start - clip.offset
       const notes = clip.notes
       notes.forEach((note, i) => {
+        // Swing moves the whole note later, keeping its length.
+        const swing = swingDelay(note.start, clip.swing)
         let endBeat = note.start + note.length
         let glideFrom: number | null = null
         if (mono) {
@@ -116,8 +118,8 @@ export function noteEvents(project: Project, w: ScheduleWindow): NoteEvent[] {
           const prev = notes.slice(0, i).findLast((n) => n.start < note.start - EPSILON)
           if (prev && prev.start + prev.length >= note.start - EPSILON) glideFrom = prev.pitch
         }
-        const noteStart = Math.max(origin + note.start * spb, clip.start)
-        const noteEnd = Math.min(origin + endBeat * spb, clipEnd)
+        const noteStart = Math.max(origin + (note.start + swing) * spb, clip.start)
+        const noteEnd = Math.min(origin + (endBeat + swing) * spb, clipEnd)
         if (noteEnd - noteStart <= EPSILON) return
         let at = noteStart
         if (noteStart < w.from || noteStart >= w.to) {

@@ -41,7 +41,7 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
     const range = clipBeatRange(clip, project.bpm)
     const clipBeats = range.to - range.from
     const bars = Math.max(1, Math.ceil(clipBeats / barBeats - 1e-6))
-    const pattern = generatePattern({ genre: settings.genre, key: settings.key, scale: settings.scale, seed: newSeed() }, bars, Math.round(barBeats / 0.25))
+    const pattern = generatePattern({ genre: settings.genre, key: settings.key, scale: settings.scale, seed: newSeed() }, bars, ts)
     // Drums go into this clip's beats; the other parts get their own clips starting with it.
     const within = (notes: GeneratedNote[], shift: number) =>
       notes.filter((n) => n.start < clipBeats - 1e-6).map((n) => createNote({ ...n, start: n.start + shift }))
@@ -50,7 +50,7 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
       instrument: p.key === 'bass' ? 'bass' : p.key === 'chords' ? genre.chords.instrument : genre.melody.instrument,
       notes: within(pattern[p.key], 0),
     }))
-    applyPattern(clip.id, settings.parts.includes('drums') ? within(pattern.drums, range.from) : null, parts, `Generate ${genre.label}`)
+    applyPattern(clip.id, settings.parts.includes('drums') ? within(pattern.drums, range.from) : null, parts, `Generate ${genre.label}`, pattern.swing)
     setGenerated((n) => n + 1)
   }
 

@@ -6,7 +6,7 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 ## Progress
 
 Every planned feature is built, including the optional graphic pitch editor, and a second pass filled the
-remaining gaps (steps 8 and 9). Every step has unit tests (301
+remaining gaps (steps 8 and 9). Every step has unit tests (308
 in total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
@@ -31,7 +31,8 @@ in total) and was checked in Chrome.
 | 6 | Effects batch 3: auto-tune | Done | `642b1fd` |
 | 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `36f01b8` |
 | 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | `889bfee` |
-| 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | |
+| 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | `d726e7b` |
+| 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
@@ -42,8 +43,8 @@ Known gaps in what's built (planned for later steps):
 - Phones: the layout and touch gestures were checked at 390 px wide in desktop Chrome with emulated
   touch (taps, drags, two-finger pinch); they still need a check on a real phone. Long-press menus depend on the browser
   (Chrome on Android opens them; iOS Safari doesn't)
-- Drums: swing comes only from the generator's genres; generated patterns are written for 16 steps
-  per bar, so other time signatures use the first steps of each pattern
+- Drums: the generator's grooves are written in 4/4 and laid out for other time signatures (step
+  10), so a 3/4 or 6/8 pattern follows its genre loosely rather than being a style of its own
 - Pitch editor: works best on clean, single-voice recordings; its pitch line shows the original
   recording, not the moved notes
 
@@ -175,6 +176,19 @@ ringing, with a 6 ms fade. The closed and open hi-hats are in group 1 in every k
 "🎲 Kit from library" (step 8) fills the pads with a random combination of one-shots from your
 sample libraries, matched by category and name (kick, 808, snare, clap, rim, closed and open hat,
 crash, ride, tom, cowbell, shaker, conga, perc); press again for another. It's one undo step.
+
+Swing (step 10): every drum and MIDI clip has a Swing control (0–100%) in its editor's toolbar.
+Notes on the second sixteenth of each eighth play later, up to a triplet feel at 100%; the notes
+stay on the grid, and the swing is heard live and in exports. Double-click the control for
+straight. The generator writes straight notes and sets the genre's swing on the clips it fills
+(Lo-fi 75%, Hip hop 45%, R&B 36%).
+
+The generator follows the project's time signature (step 10). Its grooves are written for a bar
+of 4/4 and laid out beat by beat: 3/4 plays beats 1, 2 and 4 of the groove (beat 4 is where fills
+and pick-ups sit), 2/4 beats 1 and 2. 6/8 is felt in two pulses of three eighths: each pulse takes
+a beat of the groove, so the kick lands on the first pulse and the backbeat on the second, and
+hits fall on eighths. Fills take the bar's last beat. In 6/8 the clips get no swing, as the meter
+already moves in threes.
 
 Each step-sequencer row (step 9) has a ▾ menu to change its sound without leaving the sequencer:
 choose a one-shot from the library, load a file, or pick any of the synthesized sounds. Dropping a

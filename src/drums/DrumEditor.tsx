@@ -5,7 +5,7 @@ import { readMidiNotes } from '../midi/importMidi'
 import { secondsPerBar } from '../model/grid'
 import { beatSeconds, clipBeatRange, createNote, placeNotes } from '../model/midi'
 import type { AssetMeta, DrumPad, MidiClip, Note, Track } from '../model/types'
-import { ClipNameInput, PlaybackModeToggle } from '../pianoroll/shared'
+import { ClipNameInput, PlaybackModeToggle, SwingControl } from '../pianoroll/shared'
 import { btnClass, segClass, selectClass } from '../pianoroll/styles'
 import { applyClipEdits, applyKitPreset, setClipNotes, setPad, setPadSample, setPadSamples } from '../state/actions'
 import { loadLibrary, useLibraryStore } from '../library/store'
@@ -434,6 +434,7 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
           </select>
         </label>
         <PlaybackModeToggle />
+        <SwingControl clip={clip} />
         <button className={`${btnClass} border-accent text-accent`} onClick={() => setGeneratorOpen(true)} title="Make a beat (and chords, melody, bass) for a genre">
           Generate…
         </button>

@@ -27,6 +27,16 @@ export function pitchToFrequency(pitch: number): number {
 /** Seconds per beat (quarter note). */
 export const beatSeconds = (bpm: number) => 60 / bpm
 
+/** Beats a note starting at `beat` is delayed by a clip's swing (0–100). */
+export function swingDelay(beat: number, swing = 0): number {
+  if (!swing) return 0
+  // Only notes on the second sixteenth of an eighth (with a little tolerance) swing.
+  const inEighth = ((beat % 0.5) + 0.5) % 0.5
+  if (Math.abs(inEighth - 0.25) > 1 / 48) return 0
+  // At 100 the note lands a third of a sixteenth late: the third triplet eighth of the beat.
+  return (Math.min(100, Math.max(0, swing)) / 100) * (1 / 12)
+}
+
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 export const clampPitch = (pitch: number) => clamp(Math.round(pitch), MIN_PITCH, MAX_PITCH)
 

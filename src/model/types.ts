@@ -87,6 +87,11 @@ export interface Note {
 /** A clip of notes, played by its track's instrument. */
 export interface MidiClip extends ClipBase {
   notes: Note[]
+  /**
+   * Swing, 0–100: notes on the second sixteenth of each eighth play later, up to a triplet feel at
+   * 100. The notes themselves stay on the grid. Absent: straight.
+   */
+  swing?: number
 }
 
 export type Clip = AudioClip | MidiClip

@@ -439,6 +439,21 @@ export function addMidiClip(trackId: Id, start: number, duration?: number): Id |
   return clip.id
 }
 
+/** Sets a note clip's swing, 0–100 (0 removes it). A drag is one undo step (end it with endGesture). */
+export function setClipSwing(clipId: Id, swing: number) {
+  update(
+    'Change swing',
+    (p) => {
+      const found = findMidiClip(p, clipId)
+      if (!found) return
+      const value = Math.round(clamp(swing, 0, 100))
+      if (value > 0) found.clip.swing = value
+      else delete found.clip.swing
+    },
+    `swing:${clipId}`,
+  )
+}
+
 /**
  * Replaces a MIDI clip's notes (kept sorted). If notes reach past the clip's end, the clip grows
  * to the next bar line. Pass a coalesce key so a drag is one undo step (end it with endGesture).
@@ -703,12 +718,17 @@ export interface GeneratedPart {
  * Writes a generated pattern as one undo step: `drums` replaces the drum clip's notes (in its
  * content beats), and each part replaces what its MIDI track has under the drum clip.
  */
-export function applyPattern(drumClipId: Id, drums: Note[] | null, parts: GeneratedPart[], label = 'Generate pattern') {
+/** Writes generated notes: drums into the drum clip, the other parts onto MIDI tracks; all with `swing` (0–100). */
+export function applyPattern(drumClipId: Id, drums: Note[] | null, parts: GeneratedPart[], label = 'Generate pattern', swing = 0) {
   update(label, (p) => {
     const found = findMidiClip(p, drumClipId)
     if (!found) return
     const { clip } = found
-    if (drums) clip.notes = sortNotes(drums)
+    if (drums) {
+      clip.notes = sortNotes(drums)
+      if (swing > 0) clip.swing = swing
+      else delete clip.swing
+    }
     const end = clip.start + clip.duration
     // New tracks go right below the drum track, in the order given.
     let insertAt = p.tracks.indexOf(found.track) + 1
@@ -720,7 +740,9 @@ export function applyPattern(drumClipId: Id, drums: Note[] | null, parts: Genera
         p.tracks.splice(insertAt++, 0, track)
       }
       track.clips = track.clips.filter((c) => c.start >= end - 1e-6 || c.start + c.duration <= clip.start + 1e-6)
-      track.clips.push(createMidiClip({ name: part.track, start: clip.start, duration: clip.duration, notes: sortNotes(part.notes) }))
+      track.clips.push(
+        createMidiClip({ name: part.track, start: clip.start, duration: clip.duration, notes: sortNotes(part.notes), ...(swing > 0 ? { swing } : {}) }),
+      )
     }
   })
 }

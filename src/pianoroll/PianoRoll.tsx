@@ -30,7 +30,7 @@ import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { toast } from '../ui/toast'
 import { useShellStore } from '../ui/shell'
 import { DrumEditor } from '../drums/DrumEditor'
-import { ClipNameInput, PlaybackModeToggle } from './shared'
+import { ClipNameInput, PlaybackModeToggle, SwingControl } from './shared'
 import { btnClass, segClass } from './styles'
 import { GRID_STEPS, usePianoRollStore, type PianoRollTool } from './store'
 
@@ -261,6 +261,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
         </select>
       </label>
       <PlaybackModeToggle />
+      <SwingControl clip={clip} />
       <label className="flex items-center gap-1 text-text-dim" title="Velocity of new notes, and of the selected notes">
         Vel
         <input

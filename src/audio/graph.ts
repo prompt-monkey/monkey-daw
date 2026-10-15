@@ -13,13 +13,16 @@
 import { EffectChain } from '../effects/chain'
 import { sampleRange, valueAt } from '../automation/curve'
 import { parseTarget, resolveTarget } from '../automation/targets'
-import type { AutomationPoint, Id, Instrument, Project, Send, Track } from '../model/types'
+import type { AutomatedChannel, AutomationPoint, Id, Instrument, Project, Send, Track } from '../model/types'
 import { playDrumPad } from './drums'
 import { playInstrumentNote, type NoteToPlay } from './instruments'
 import { gainEnvelope, trackIsAudible, trimEventStart, type ClipEvent, type NoteEvent } from './schedule'
+import type { ClipSource } from './stretch'
 
 export interface Voice {
   stop: () => void
+  /** Set once the voice has finished playing. */
+  ended?: boolean
 }
 
 /** Peak and RMS amplitude per channel (left, right) over the last analysis window. */
@@ -79,9 +82,21 @@ interface Strip {
   sends: Map<Id, GainNode>
 }
 
-/** A track's lanes that have points, by target. Empty lanes don't take control. */
-function activeLanes(track: Track): Map<string, AutomationPoint[]> {
-  return new Map(track.automation.filter((l) => l.points.length > 0).map((l) => [l.target, l.points]))
+/** The nodes automation drives on a track, a bus or the master (which has no panner). */
+interface AutomationNodes {
+  fader: GainNode
+  panner: StereoPannerNode | null
+  chain: EffectChain
+}
+
+/**
+ * A channel's lanes that have points, by target. Empty lanes don't take control, and neither do
+ * lanes being written right now (the control's live value is heard instead).
+ */
+function activeLanes(channel: AutomatedChannel, id: string, writing: ReadonlySet<string>): Map<string, AutomationPoint[]> {
+  return new Map(
+    channel.automation.filter((l) => l.points.length > 0 && !writing.has(`${id}|${l.target}`)).map((l) => [l.target, l.points]),
+  )
 }
 
 /** Effect parameters under automation, by effect id, for the effect chain. */
@@ -109,20 +124,46 @@ export class MixGraph {
   private masterInput: GainNode
   private masterChain: EffectChain
   private masterFader: GainNode
+  /** 1 or 0 for the master's mute, after its fader so volume automation never overrides it. */
+  private masterAudible: GainNode
   private masterMeter: Meter
+  /** Lanes being written by moving a control ("channel|target"), left alone by playback. */
+  private writing: ReadonlySet<string> = new Set()
   private tracks = new Map<Id, Strip>()
   private buses = new Map<Id, Strip>()
   /** The node each strip's `out` currently feeds. */
   private connectedTo = new WeakMap<Strip, AudioNode>()
+  /** Drum hits that may still ring, per "track:choke group", so a later hit can cut them. */
+  private chokable = new Map<string, { at: number; voice: Voice & { choke?: (when: number) => void } }[]>()
 
   constructor(ctx: BaseAudioContext) {
     this.ctx = ctx
     this.masterInput = ctx.createGain()
     this.masterFader = ctx.createGain()
+    this.masterAudible = ctx.createGain()
     this.masterChain = new EffectChain(ctx)
     this.masterInput.connect(this.masterChain.input)
-    this.masterChain.output.connect(this.masterFader).connect(ctx.destination)
-    this.masterMeter = new Meter(ctx, this.masterFader)
+    this.masterChain.output.connect(this.masterFader).connect(this.masterAudible).connect(ctx.destination)
+    this.masterMeter = new Meter(ctx, this.masterAudible)
+  }
+
+  setWriting(keys: ReadonlySet<string>) {
+    this.writing = keys
+  }
+
+  /** Every channel with its automation nodes: tracks, buses and the master. */
+  private automatable(project: Project): { id: string; channel: AutomatedChannel; nodes: AutomationNodes }[] {
+    const out: { id: string; channel: AutomatedChannel; nodes: AutomationNodes }[] = []
+    for (const track of project.tracks) {
+      const strip = this.tracks.get(track.id)
+      if (strip) out.push({ id: track.id, channel: track, nodes: strip })
+    }
+    for (const bus of project.buses) {
+      const strip = this.buses.get(bus.id)
+      if (strip) out.push({ id: bus.id, channel: bus, nodes: strip })
+    }
+    out.push({ id: 'master', channel: project.master, nodes: { fader: this.masterFader, panner: null, chain: this.masterChain } })
+    return out
   }
 
   /**
@@ -134,56 +175,65 @@ export class MixGraph {
     this.prune(this.buses, new Set(project.buses.map((b) => b.id)))
     this.prune(this.tracks, new Set(project.tracks.map((t) => t.id)))
 
+    const fresh = new Set<string>()
     for (const bus of project.buses) {
       const [strip, isNew] = this.ensure(this.buses, bus.id)
+      if (isNew) fresh.add(bus.id)
       this.route(strip, 'master', this.masterInput)
-      strip.chain.sync(bus.effects, bus.fxBypass, project.bpm, immediate)
-      this.setParam(strip.fader.gain, bus.muted ? 0 : bus.volume, immediate || isNew)
-      this.setParam(strip.panner.pan, bus.pan, immediate || isNew)
+      const lanes = activeLanes(bus, bus.id, this.writing)
+      strip.chain.sync(bus.effects, bus.fxBypass, project.bpm, immediate, automatedEffectParams(lanes))
+      this.setParam(strip.audible.gain, bus.muted ? 0 : 1, immediate || isNew)
+      if (!lanes.has('volume')) this.setParam(strip.fader.gain, bus.volume, immediate || isNew)
+      if (!lanes.has('pan')) this.setParam(strip.panner.pan, bus.pan, immediate || isNew)
     }
 
     for (const track of project.tracks) {
       const [strip, isNew] = this.ensure(this.tracks, track.id)
+      if (isNew) fresh.add(track.id)
       const bus = track.output === 'master' ? undefined : this.buses.get(track.output)
       if (bus) this.route(strip, track.output, bus.input)
       else this.route(strip, 'master', this.masterInput)
       this.syncSends(strip, track.sends, immediate)
-      const lanes = activeLanes(track)
+      const lanes = activeLanes(track, track.id, this.writing)
       strip.chain.sync(track.effects, track.fxBypass, project.bpm, immediate, automatedEffectParams(lanes))
       this.setParam(strip.audible.gain, trackIsAudible(track, project.tracks) ? 1 : 0, immediate || isNew)
       if (!lanes.has('volume')) this.setParam(strip.fader.gain, track.volume, immediate || isNew)
       if (!lanes.has('pan')) this.setParam(strip.panner.pan, track.pan, immediate || isNew)
-      if (automationTime !== null) {
-        for (const [target, points] of lanes) {
-          const value = valueAt(points, automationTime)
-          const resolved = resolveTarget(track, target)
-          if (value === null || !resolved) continue
-          for (const { param, map } of this.automationBindings(track, strip, target)) {
-            hold(this.ctx, param, map(resolved.toReal(value), project.bpm), immediate || isNew)
-          }
+    }
+
+    const master = project.master
+    const masterLanes = activeLanes(master, 'master', this.writing)
+    this.masterChain.sync(master.effects, master.fxBypass, project.bpm, immediate, automatedEffectParams(masterLanes))
+    this.setParam(this.masterAudible.gain, master.muted ? 0 : 1, immediate)
+    if (!masterLanes.has('volume')) this.setParam(this.masterFader.gain, master.volume, immediate)
+
+    // Stopped: hold automated controls at their value where the playhead rests.
+    if (automationTime === null) return
+    for (const { id, channel, nodes } of this.automatable(project)) {
+      for (const [target, points] of activeLanes(channel, id, this.writing)) {
+        const value = valueAt(points, automationTime)
+        const resolved = resolveTarget(channel, target)
+        if (value === null || !resolved) continue
+        for (const { param, map } of this.automationBindings(channel, nodes, target)) {
+          hold(this.ctx, param, map(resolved.toReal(value), project.bpm), immediate || fresh.has(id))
         }
       }
     }
-
-    this.masterChain.sync(project.master.effects, project.master.fxBypass, project.bpm, immediate)
-    this.setParam(this.masterFader.gain, project.master.muted ? 0 : project.master.volume, immediate)
   }
 
   /**
-   * Schedules every track's automation across a window of timeline time, as ramps on the audio
-   * clock (`ctxOffset` maps timeline time to context time). A window that starts fresh (playback
-   * start, loop wrap) first jumps to the value at its start.
+   * Schedules the automation of every track, bus and the master across a window of timeline time,
+   * as ramps on the audio clock (`ctxOffset` maps timeline time to context time). A window that
+   * starts fresh (playback start, loop wrap) first jumps to the value at its start.
    */
   scheduleAutomation(project: Project, window: { from: number; to: number; catchUp: boolean }, ctxOffset: number) {
-    for (const track of project.tracks) {
-      const strip = this.tracks.get(track.id)
-      if (!strip) continue
-      for (const [target, points] of activeLanes(track)) {
-        const resolved = resolveTarget(track, target)
+    for (const { id, channel, nodes } of this.automatable(project)) {
+      for (const [target, points] of activeLanes(channel, id, this.writing)) {
+        const resolved = resolveTarget(channel, target)
         if (!resolved) continue
         const samples = sampleRange(points, window.from, window.to)
         if (!samples.length) continue
-        for (const { param, map } of this.automationBindings(track, strip, target)) {
+        for (const { param, map } of this.automationBindings(channel, nodes, target)) {
           const [first, ...rest] = samples
           const start = Math.max(this.ctx.currentTime, first.time + ctxOffset)
           if (window.catchUp) {
@@ -207,19 +257,25 @@ export class MixGraph {
 
   /** The AudioParams an automation target drives, with the map from its real value. */
   private automationBindings(
-    track: Track,
-    strip: Strip,
+    channel: AutomatedChannel,
+    nodes: AutomationNodes,
     target: string,
   ): { param: AudioParam; map: (real: number, bpm: number) => number }[] {
     const parsed = parseTarget(target)
     if (!parsed) return []
-    if (parsed.kind === 'volume') return [{ param: strip.fader.gain, map: (v) => v }]
-    if (parsed.kind === 'pan') return [{ param: strip.panner.pan, map: (v) => v }]
-    const effect = track.effects.find((e) => e.id === parsed.effectId)
+    if (parsed.kind === 'volume') return [{ param: nodes.fader.gain, map: (v) => v }]
+    if (parsed.kind === 'pan') return nodes.panner ? [{ param: nodes.panner.pan, map: (v) => v }] : []
+    const effect = channel.effects.find((e) => e.id === parsed.effectId)
     if (!effect) return []
-    return strip.chain
+    return nodes.chain
       .bindings(parsed.effectId, parsed.param)
       .map((b) => ({ param: b.param, map: (v: number, bpm: number) => b.map(v, effect.params, bpm) }))
+  }
+
+  /** An effect's live reading on a track, a bus or the master. */
+  effectMonitor(channelId: Id | 'master', effectId: Id): unknown {
+    const chain = channelId === 'master' ? this.masterChain : (this.tracks.get(channelId) ?? this.buses.get(channelId))?.chain
+    return chain?.monitor(effectId) ?? null
   }
 
   /** Meter reading for a track, a bus, or 'master'. */
@@ -229,43 +285,40 @@ export class MixGraph {
   }
 
   /**
-   * Plays a clip event with the event's timeline time mapped to `when` (AudioContext time). A
-   * synced clip plays its audio faster or slower: from `buffer` at the event's rate (the pitch
-   * follows), or from a buffer already time-stretched by that rate (`stretched`).
+   * Plays a clip event with the event's timeline time mapped to `when` (AudioContext time), from
+   * `source`: a buffer stretched by `source.stretch` and played at `source.playbackRate`.
    */
-  playClip(event: ClipEvent, buffer: AudioBuffer, when: number, onEnded?: () => void, stretched = false): Voice | null {
+  playClip(event: ClipEvent, source: ClipSource, when: number, onEnded?: () => void): Voice | null {
+    const { buffer } = source
     const strip = this.tracks.get(event.trackId)
     if (!strip) return null
     const ev = trimEventStart(event, this.ctx.currentTime - when)
     if (!ev) return null
     const start = when + (ev.at - event.at)
 
-    const source = this.ctx.createBufferSource()
-    source.buffer = buffer
+    const node = this.ctx.createBufferSource()
+    node.buffer = buffer
     const gain = this.ctx.createGain()
     const [first, ...rest] = gainEnvelope(ev)
     gain.gain.setValueAtTime(first.value, start + first.time)
     for (const p of rest) gain.gain.linearRampToValueAtTime(p.value, start + p.time)
-    source.connect(gain).connect(strip.input)
-    if (stretched) {
-      source.start(start, ev.assetOffset / ev.rate, ev.duration)
-    } else {
-      source.playbackRate.value = ev.rate
-      source.start(start, ev.assetOffset, ev.duration * ev.rate)
-    }
+    node.connect(gain).connect(strip.input)
+    // Positions in the stretched buffer are the audio's positions divided by the stretch.
+    node.playbackRate.value = source.playbackRate
+    node.start(start, ev.assetOffset / source.stretch, ev.duration * source.playbackRate)
 
     const cleanup = () => {
-      source.disconnect()
+      node.disconnect()
       gain.disconnect()
     }
-    source.onended = () => {
+    node.onended = () => {
       cleanup()
       onEnded?.()
     }
     return {
       stop: () => {
         try {
-          source.stop()
+          node.stop()
         } catch {
           // Already stopped.
         }
@@ -316,7 +369,18 @@ export class MixGraph {
     if (!pad || !strip || this.ctx.currentTime - when > 0.03) return null
     const at = Math.max(when, this.ctx.currentTime)
     const voice = playDrumPad(this.ctx, strip.input, pad, note.velocity, at, pad.sample && audio(pad.sample.assetId))
-    voice.onEnded = onEnded
+    if (pad.choke > 0) {
+      const key = `${track.id}:${pad.choke}`
+      // Hits that started earlier stop here; hits scheduled after this one (rare) are left alone.
+      const ringing = (this.chokable.get(key) ?? []).filter((v) => !v.voice.ended)
+      for (const v of ringing) if (v.at < at - 1e-6) v.voice.choke?.(at)
+      ringing.push({ at, voice })
+      this.chokable.set(key, ringing)
+    }
+    voice.onEnded = () => {
+      ;(voice as { ended?: boolean }).ended = true
+      onEnded?.()
+    }
     return voice
   }
 
@@ -331,6 +395,7 @@ export class MixGraph {
     this.buses.clear()
     this.masterChain.dispose()
     this.masterFader.disconnect()
+    this.masterAudible.disconnect()
     this.masterInput.disconnect()
   }
 

@@ -42,8 +42,8 @@ export async function renderProject(
   mix.scheduleEffects(project, { from: range.start, to: range.end, catchUp: true }, -range.start)
   const window = { from: range.start, to: range.end, catchUp: true, cutAt: range.end }
   for (const ev of clipEvents(project, window)) {
-    const source = clipBuffer(project, assets, ev.clip.assetId, ev.rate)
-    if (source) mix.playClip(ev, source.buffer, ev.at - range.start, undefined, source.stretched)
+    const source = clipBuffer(assets, ev)
+    if (source) mix.playClip(ev, source, ev.at - range.start)
   }
   const audio = (id: string) => assets.get(id)
   for (const ev of noteEvents(project, window)) {

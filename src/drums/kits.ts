@@ -3,7 +3,7 @@
 
 import type { DrumKit, DrumPad, DrumVoice } from '../model/types'
 
-type PadTemplate = Pick<DrumPad, 'note' | 'name' | 'voice'>
+type PadTemplate = Pick<DrumPad, 'note' | 'name' | 'voice'> & Partial<Pick<DrumPad, 'choke'>>
 
 /** Pad layout, in pad-grid and step-sequencer order. */
 export const PADS: PadTemplate[] = [
@@ -11,8 +11,9 @@ export const PADS: PadTemplate[] = [
   { note: 38, name: 'Snare', voice: 'snare' },
   { note: 39, name: 'Clap', voice: 'clap' },
   { note: 37, name: 'Rim', voice: 'rim' },
-  { note: 42, name: 'Closed hat', voice: 'hat-closed' },
-  { note: 46, name: 'Open hat', voice: 'hat-open' },
+  // The hi-hats choke each other, like a real hi-hat.
+  { note: 42, name: 'Closed hat', voice: 'hat-closed', choke: 1 },
+  { note: 46, name: 'Open hat', voice: 'hat-open', choke: 1 },
   { note: 49, name: 'Crash', voice: 'crash' },
   { note: 51, name: 'Ride', voice: 'ride' },
   { note: 35, name: 'Sub kick', voice: 'sub' },
@@ -121,6 +122,6 @@ export function createKit(presetId = 'standard'): DrumKit {
   const preset = KIT_PRESETS.find((p) => p.id === presetId) ?? KIT_PRESETS[0]
   return {
     preset: preset.id,
-    pads: PADS.map((pad) => ({ ...pad, tune: 0, decay: 1, gain: 1, ...preset.pads[pad.note] })),
+    pads: PADS.map((pad) => ({ ...pad, tune: 0, decay: 1, gain: 1, choke: pad.choke ?? 0, ...preset.pads[pad.note] })),
   }
 }

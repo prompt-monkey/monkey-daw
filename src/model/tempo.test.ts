@@ -77,9 +77,9 @@ describe('synced clips', () => {
   it('trim in timeline seconds while the offset moves in audio seconds', () => {
     const c = createClip({ name: 'Loop', assetId: 'a', start: 1, duration: 2, offset: 1, sourceBpm: 60 })
     // Rate 2: the audio before the offset (1 s) covers 0.5 s of timeline.
-    expect(trimStart(c, 0, 2)).toMatchObject({ start: 0.5, offset: 0, duration: 2.5 })
+    expect(trimStart(c, 0, { rate: 2 })).toMatchObject({ start: 0.5, offset: 0, duration: 2.5 })
     // 4 s of audio from offset 1 s leaves 1.5 s of timeline.
-    expect(trimEnd(c, 4, 10, 2)).toMatchObject({ duration: 1.5 })
+    expect(trimEnd(c, 10, { rate: 2, assetDuration: 4 })).toMatchObject({ duration: 1.5 })
   })
 
   it('need stretching only in Stretch mode, once per asset and rate', () => {
@@ -91,7 +91,7 @@ describe('synced clips', () => {
       createClip({ name: 'C', assetId: 'c', start: 0, duration: 2 }),
     ]
     p.tracks[1] = { ...p.tracks[1], kind: 'midi', clips: [createMidiClip({ start: 0, duration: 2 })] }
-    expect(neededStretches(p)).toEqual([{ assetId: 'a', rate: 2 }])
+    expect(neededStretches(p)).toEqual([{ assetId: 'a', rate: 2, reversed: false }])
     expect(neededStretches({ ...p, syncMode: 'resample' })).toEqual([])
   })
 

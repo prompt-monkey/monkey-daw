@@ -83,15 +83,15 @@ describe('trim', () => {
 
   it('keeps a minimum length', () => {
     expect(trimStart(clip({ start: 2, duration: 4 }), 10).duration).toBeCloseTo(MIN_CLIP_DURATION)
-    expect(trimEnd(clip({ start: 2, duration: 4 }), 10, 0).duration).toBeCloseTo(MIN_CLIP_DURATION)
+    expect(trimEnd(clip({ start: 2, duration: 4 }), 0, { assetDuration: 10 }).duration).toBeCloseTo(MIN_CLIP_DURATION)
   })
 
   it('cannot extend the end past the end of the audio', () => {
-    expect(trimEnd(clip({ start: 2, offset: 1, duration: 4 }), 6, 20).duration).toBe(5)
+    expect(trimEnd(clip({ start: 2, offset: 1, duration: 4 }), 20, { assetDuration: 6 }).duration).toBe(5)
   })
 
   it('shrinks fades that no longer fit', () => {
-    expect(trimEnd(clip({ duration: 4, fadeIn: 1, fadeOut: 2 }), 10, 3.5)).toMatchObject({ duration: 1.5, fadeIn: 1, fadeOut: 0.5 })
+    expect(trimEnd(clip({ duration: 4, fadeIn: 1, fadeOut: 2 }), 3.5, { assetDuration: 10 })).toMatchObject({ duration: 1.5, fadeIn: 1, fadeOut: 0.5 })
   })
 })
 

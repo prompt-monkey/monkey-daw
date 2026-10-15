@@ -30,7 +30,7 @@ export function createInstrument(type: Instrument['type'] = 'keys'): Instrument 
 }
 
 export function createBus(name: string): Bus {
-  return { id: createId('bus'), name, volume: 1, pan: 0, muted: false, effects: [], fxBypass: false }
+  return { id: createId('bus'), name, volume: 1, pan: 0, muted: false, effects: [], fxBypass: false, automation: [] }
 }
 
 export function createClip(fields: Pick<AudioClip, 'name' | 'assetId' | 'start' | 'duration'> & Partial<AudioClip>): AudioClip {
@@ -51,7 +51,7 @@ export function createProject(name = 'Untitled project'): Project {
     snap: 'beat',
     syncMode: 'stretch',
     loop: { enabled: false, start: 0, end: 8 },
-    master: { volume: 1, muted: false, effects: [], fxBypass: false },
+    master: { volume: 1, muted: false, effects: [], fxBypass: false, automation: [] },
     tracks: [1, 2, 3, 4].map((n) => createTrack(`Track ${n}`)),
     buses: [],
     assets: {},

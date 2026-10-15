@@ -79,6 +79,11 @@ export class EffectChain {
     }
   }
 
+  /** An effect's live reading (see EffectInstance.monitor), or null. */
+  monitor(effectId: Id): unknown {
+    return this.entries.get(effectId)?.instance.monitor?.() ?? null
+  }
+
   /** The AudioParams an effect parameter drives, for automation. */
   bindings(effectId: Id, key: string): Binding[] {
     return this.entries.get(effectId)?.instance.bindings(key) ?? []

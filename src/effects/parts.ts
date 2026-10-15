@@ -32,6 +32,8 @@ export interface EffectInstance {
   bindings: (key: string) => Binding[]
   /** Effects that move with the song position (sidechain duck) schedule themselves here. */
   schedule?: (window: ScheduleWindow, ctxOffset: number, params: EffectParams, bpm: number) => void
+  /** What the effect is doing right now, for display (auto-tune's detected note). */
+  monitor?: () => unknown
   dispose: () => void
 }
 
@@ -115,6 +117,7 @@ export interface Parts {
   /** Non-numeric or structural changes (filter type, ping-pong, impulse, curve). */
   configure?: (params: EffectParams, bpm: number) => boolean | void
   schedule?: EffectInstance['schedule']
+  monitor?: EffectInstance['monitor']
   nodes: () => AudioNode[]
   /** Extra cleanup (stopping oscillators). */
   dispose?: () => void
@@ -136,6 +139,7 @@ export function instance(ctx: BaseAudioContext, parts: Parts): EffectInstance {
     },
     bindings: (key) => parts.bindings()[key] ?? [],
     schedule: parts.schedule,
+    monitor: parts.monitor,
     dispose: () => {
       parts.dispose?.()
       disconnectAll(parts.nodes())

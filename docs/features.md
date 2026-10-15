@@ -5,8 +5,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 
 ## Progress
 
-Every planned feature is built, apart from the optional graphic pitch editor. Every step has unit
-tests (246 in total) and was checked in Chrome.
+Every planned feature is built, including the optional graphic pitch editor. Every step has unit
+tests (270 in total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -27,22 +27,22 @@ tests (246 in total) and was checked in Chrome.
 | 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | `73d7ab2` |
 | 6 | Effects batch 2: character and space (14 effects) | Done | `ae07721` |
 | 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | `b229b4f` |
-| 6 | Effects batch 3: auto-tune | Done | |
-| 6 | Graphic pitch editor | Optional stretch goal | |
+| 6 | Effects batch 3: auto-tune | Done | `642b1fd` |
+| 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | |
 
 Known gaps in what's built (planned for later steps):
-- Timeline: reverse, pitch shift and free stretching of clips, curved clip fades, consolidate
-  and convert-to-audio (clips stretch only through tempo sync)
-- Mixer and automation: automation on buses and the master, writing automation by moving a knob
+- Timeline: no free time-stretch of a clip by dragging its edge (clips stretch through tempo sync);
+  consolidating a hard-panned mono clip comes out about 3 dB louder on that side
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
 - Phones: the layout was checked at 390 px wide in desktop Chrome; touch gestures (pinch zoom, tap
-  to seek, touch drags) need a check on a real phone. The top bar wraps to several rows on phones,
-  and long-press menus depend on the browser (Chrome on Android opens them; iOS Safari doesn't)
-- Drums: no choke groups (a closed hat doesn't cut an open hat); swing comes only from the
-  generator's genres; generated patterns are written for 16 steps per bar, so other time
-  signatures use the first steps of each pattern
+  to seek, touch drags) need a check on a real phone. Long-press menus depend on the browser
+  (Chrome on Android opens them; iOS Safari doesn't)
+- Drums: swing comes only from the generator's genres; generated patterns are written for 16 steps
+  per bar, so other time signatures use the first steps of each pattern
+- Pitch editor: works best on clean, single-voice recordings; its pitch line shows the original
+  recording, not the moved notes
 
 ## Development
 
@@ -87,6 +87,14 @@ Known gaps in what's built (planned for later steps):
 - Convert MIDI or drums to audio
 - Zoom
 - Track height: normal or compact
+
+The clip properties and consolidate / convert were added in the follow-ups. Right-click an audio
+clip to reverse it, set its pitch (semitones, without changing its length), bounce it, or
+consolidate the selected clips on each track into one (gain, fades, pitch, reverse and tempo
+baked in; the track's effects are not). Right-click a MIDI or drum clip to convert it to audio,
+with or without the track's effects: the result goes on a new audio track below, the source track
+is muted, and the silent tail is trimmed. Fades bend when their handle is dragged up or down;
+double-click the handle to straighten it.
 
 ## 4. Tracks
 - Types: audio, MIDI, drums
@@ -139,6 +147,9 @@ right-click to remove, Alt+click to change a step's velocity. The pattern genera
 Reggaeton, Trap, Trap latino, Hip hop, Lo-fi, Ballad, Corrido tumbado, Rock) writes drums into the
 clip and chords, melody and bass onto MIDI tracks named after them, in a chosen key and major or
 minor; "New variation" makes another take. PAT/SONG works as in the piano roll.
+
+Pads have choke groups (None or 1–4): a hit cuts off the other pads of its group that are still
+ringing, with a 6 ms fade. The closed and open hi-hats are in group 1 in every kit.
 
 ## 8. Mixer
 - Channel strips
@@ -221,10 +232,16 @@ whole periods of the detected pitch, with a short cross-fade, so sung notes stay
 sounds (breaths, consonants) pass through untouched. Detection runs on a mono mix and every channel
 is shifted the same way, so stereo is kept. It adds about 25 ms of latency and is the heaviest
 effect (around 12% of a core per instance on the test machine), so use it on vocals, not on every
-track. It doesn't show the detected note in the rack yet. Presets: Vocal tune and Robot voice.
+track. While audio plays, its rack card shows the note it hears, how far off it is, and the note
+it pulls to (e.g. "A3 +30¢ → A3"). Presets: Vocal tune and Robot voice.
 
-Still to do:
-- Graphic pitch editor: optional stretch goal
+**Graphic pitch editor** (follow-ups). Right-click an audio clip → Edit pitch… The recording's
+pitch is analysed in a worker (YIN every ~6 ms) and grouped into notes, shown as blobs over a
+semitone grid with the pitch line. Drag a note up or down (it lands on a semitone; Alt moves it
+freely), double-click it to reset, or "Snap all to notes". Each change is rendered with the
+auto-tune's shifter into new audio that the clip then plays; the clip keeps the original audio and
+the list of moves, so edits can be changed or undone, and the result works with reverse, tempo
+sync, export and saving like any audio clip.
 
 ## 10. Automation
 - Lanes for effect knobs, volume and pan
@@ -232,11 +249,17 @@ Still to do:
 - Curve handles
 - Knobs move during playback
 
-Built in phase 3, on tracks. Lanes are drawn over the track's clips (track menu → Show automation,
-or right-click a rack knob). Values follow each control's own scale (fader curve, octaves for
-frequencies). Not yet: automation on buses and the master, writing automation by moving a knob
-during playback, and automating reverb decay or saturation drive (changing those rebuilds audio
-data, so they can't move smoothly).
+Built in phase 3 on tracks; buses, the master and writing were added in the follow-ups. Track lanes
+are drawn over the track's clips (track menu → Show automation, or right-click a rack knob). Bus
+and master lanes get rows under the tracks (the "A" button on their mixer strip, or right-click a
+knob in their rack); the master has no pan lane. Values follow each control's own scale (fader
+curve, octaves for frequencies).
+
+Write mode (the Write button, or W): while the song plays, moving a fader, pan or knob records the
+movement into its lane, replacing what was there for as long as the control is held, and you hear
+the movement as you make it. Each movement is one undo step. Automated controls can only be moved by
+hand while Write is on. Reverb decay and saturation drive still can't be automated (changing them
+rebuilds audio data, so they can't move smoothly).
 
 ## 11. Tempo sync
 - Samples with a BPM in their filename fit the project tempo
@@ -301,6 +324,9 @@ narrower track header with volume and pan left to the mixer, the library and lyr
 over the timeline, shorter bottom panels, fewer toolbar buttons, no footer. On touch screens two
 fingers pinch to zoom the timeline, one finger scrolls, a tap moves the playhead, and drags on
 clips, notes, steps, pads, knobs and automation edit instead of scrolling.
+
+On phones the top bar keeps Save, undo/redo, the time, the transport and tempo / time signature /
+snap / loop, and puts Projects, Library, Lyrics, Mixer, Export and the view options in a ☰ menu.
 
 ## Tech stack
 

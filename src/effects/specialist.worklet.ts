@@ -116,9 +116,13 @@ class DoublerProcessor extends AudioWorkletProcessor {
   }
 }
 
+/** Frames between auto-tune's reports of what it hears (about 10 a second). */
+const REPORT_FRAMES = 4096
+
 class AutoTuneProcessor extends AudioWorkletProcessor {
   private tuner = new AutoTuner(sampleRate)
   private shifters: SyncShifter[] = []
+  private sinceReport = 0
 
   static get parameterDescriptors() {
     return [
@@ -146,6 +150,11 @@ class AutoTuneProcessor extends AudioWorkletProcessor {
       for (const channel of input) mono += channel[i] / input.length
       const { ratio, period } = this.tuner.step(mono, key, scale, retune, amount)
       for (let c = 0; c < output.length; c++) output[c][i] = this.shifters[c].next(input[Math.min(c, input.length - 1)][i], ratio, period)
+    }
+    this.sinceReport += input[0].length
+    if (this.sinceReport >= REPORT_FRAMES) {
+      this.sinceReport = 0
+      this.port.postMessage(this.tuner.heard)
     }
     return true
   }

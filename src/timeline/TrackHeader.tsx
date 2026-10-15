@@ -46,6 +46,8 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
   // While automated, the sliders follow the automation and can't be dragged.
   const autoVolume = useAutomatedValue(track, 'volume')
   const autoPan = useAutomatedValue(track, 'pan')
+  // Automated sliders can be moved by hand only while writing automation.
+  const writing = useViewStore((s) => s.automationWrite)
   // Phones: a narrower header, name and buttons on separate rows, volume and pan in the mixer.
   const narrow = useShellStore((s) => s.narrow)
   const headerWidth = useHeaderWidth()
@@ -72,7 +74,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
         max={max}
         step={0.001}
         value={value}
-        disabled={automated}
+        disabled={automated && !writing}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={endGesture}
         onKeyUp={endGesture}

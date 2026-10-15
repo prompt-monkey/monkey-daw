@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AutomationTarget, Track } from '../model/types'
+import type { AutomatedChannel, AutomationTarget } from '../model/types'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { valueAt } from './curve'
 
@@ -10,7 +10,7 @@ const STEP = 0.002
  * The automation value (0–1) of a target at the playhead, following playback. Null when the
  * target has no automation points, so the control shows its own value.
  */
-export function useAutomatedValue(track: Track | undefined, target: AutomationTarget): number | null {
+export function useAutomatedValue(track: AutomatedChannel | undefined, target: AutomationTarget): number | null {
   const points = track?.automation.find((l) => l.target === target)?.points
   const [value, setValue] = useState<number | null>(null)
 

@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import type { Effect, EffectType, Id } from '../model/types'
 import {
   addAutomationLane,
@@ -21,6 +21,30 @@ import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { Dialog } from '../ui/Dialog'
 import { EFFECTS, EFFECT_TYPES, formatValue, fromNormalized, syncedValue, type ChoiceParam, type NumberParam } from './definitions'
 import { BUILT_IN_PRESETS, deleteUserPreset, saveUserPreset, useUserPresets } from './presets'
+import { engine } from '../audio/engine'
+import { noteName } from '../model/midi'
+import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
+import type { TunerReading } from './specialist'
+
+/** Auto-tune's live readout: the note being sung, how far off it is, and where it's going. */
+function TunerReadout({ channel, effectId }: { channel: ChannelRef; effectId: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  usePlayheadFrame(() => {
+    const el = ref.current
+    if (!el) return
+    const r = engine.effectMonitor(channel, effectId) as TunerReading | null
+    if (!r) {
+      el.textContent = 'Listening…'
+      el.title = 'Shows the sung note while audio plays'
+      return
+    }
+    const cents = Math.round((r.midi - Math.round(r.midi)) * 100)
+    const text = `${noteName(Math.round(r.midi))} ${cents >= 0 ? '+' : '−'}${Math.abs(cents)}¢ → ${noteName(r.target)}`
+    if (el.textContent !== text) el.textContent = text
+    el.title = 'Heard note, how far off it is, and the note it is pulled to'
+  })
+  return <span ref={ref} className="font-mono text-[11px] text-accent" aria-live="off" />
+}
 
 /** Drag-and-drop data type carrying the id of an effect being reordered. */
 const EFFECT_DRAG_TYPE = 'application/x-monkey-daw-effect'
@@ -48,10 +72,13 @@ function ParamKnob({
   disabled: boolean
   display?: string
 }) {
-  const track = useProjectStore((s) => (channel === 'master' ? undefined : s.project.tracks.find((t) => t.id === channel)))
+  const holder = useProjectStore((s) =>
+    channel === 'master' ? s.project.master : (s.project.tracks.find((t) => t.id === channel) ?? s.project.buses.find((b) => b.id === channel)),
+  )
   const target = effectTarget(effect.id, def.key)
-  const automated = useAutomatedValue(track, target)
-  const canAutomate = Boolean(track) && def.automatable !== false
+  const automated = useAutomatedValue(holder, target)
+  const writing = useViewStore((s) => s.automationWrite)
+  const canAutomate = Boolean(holder) && def.automatable !== false
 
   return (
     <Knob
@@ -61,20 +88,23 @@ function ParamKnob({
       onCommit={onCommit}
       disabled={disabled}
       display={display}
-      automated={automated !== null}
+      // Writing automation unlocks automated knobs so they can be moved while playing.
+      automated={automated !== null && !writing}
       onContextMenu={(e) => {
         e.preventDefault()
-        if (!track) {
-          toast('Automation is available on tracks (not buses or the master yet).')
-          return
-        }
+        if (!holder) return
         if (!canAutomate) {
           toast(`${def.label} can't be automated: changing it rebuilds the sound.`)
           return
         }
-        addAutomationLane(track.id, target)
-        useViewStore.getState().setAutomationView(track.id, target)
-        toast(`Automating ${def.label} on "${track.name}": click its lane on the timeline to add points.`)
+        addAutomationLane(channel, target)
+        useViewStore.getState().setAutomationView(channel, target)
+        // Track lanes are drawn over the track; bus and master lanes get a row under the tracks.
+        const { tracks, buses } = useProjectStore.getState().project
+        const track = tracks.find((t) => t.id === channel)
+        const bus = buses.find((b) => b.id === channel)
+        const where = track ? `"${track.name}"` : `the ${bus ? `"${bus.name}"` : 'master'} row under the tracks`
+        toast(`Automating ${def.label} on ${where}: click the lane on the timeline to add points.`)
       }}
     />
   )
@@ -178,6 +208,7 @@ const EffectCard = memo(function EffectCard({
         </Menu>
       </header>
 
+      {effect.type === 'autotune' && <TunerReadout channel={channel} effectId={effect.id} />}
       <div className="grid auto-cols-max grid-flow-col grid-rows-2 gap-x-1 gap-y-2">
         {def.params.map((p) => {
           if (p.kind === 'number') {

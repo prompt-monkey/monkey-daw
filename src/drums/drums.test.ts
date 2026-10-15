@@ -37,6 +37,20 @@ describe('kits', () => {
     expect(createKit('nope').preset).toBe('standard')
   })
 
+  it('puts the hi-hats in a choke group, and keeps choke groups between 0 and 4', () => {
+    const kit = createKit()
+    expect(kit.pads.filter((p) => p.choke === 1).map((p) => p.note)).toEqual([NOTE.hat, NOTE.openHat])
+    const t = drumTrack().id
+    setPad(t, NOTE.crash, { choke: 9 })
+    setPad(t, NOTE.ride, { choke: 2.4 })
+    const pads = drumTrack().kit!.pads
+    expect(pads.find((p) => p.note === NOTE.crash)!.choke).toBe(4)
+    expect(pads.find((p) => p.note === NOTE.ride)!.choke).toBe(2)
+    // Older projects without choke groups get the default ones.
+    const loaded = normalizeProject({ version: 1, tracks: [{ id: 't', kind: 'drums', kit: { pads: [{ note: 46 }, { note: 36 }] } }] })
+    expect(loaded.tracks[0].kit!.pads.map((p) => p.choke)).toEqual([1, 0])
+  })
+
   it('scales the length of synthesized sounds with the decay', () => {
     expect(drumLength({ voice: 'crash', decay: 2 })).toBeCloseTo(3.2)
     expect(drumLength({ voice: 'shaker', decay: 1 })).toBeCloseTo(0.102)
@@ -117,8 +131,8 @@ describe('drum tracks', () => {
     expect(p.tracks[0].kit).toEqual({
       preset: 'trap',
       pads: [
-        { note: 36, name: 'Kick', voice: 'kick', tune: 12, decay: 1, gain: 1, sample: { assetId: 'a1' } },
-        { note: 38, name: 'Snare', voice: 'snare', tune: 0, decay: 1, gain: 1 },
+        { note: 36, name: 'Kick', voice: 'kick', tune: 12, decay: 1, gain: 1, choke: 0, sample: { assetId: 'a1' } },
+        { note: 38, name: 'Snare', voice: 'snare', tune: 0, decay: 1, gain: 1, choke: 0 },
       ],
     })
     expect(p.tracks[0].clips).toHaveLength(1)

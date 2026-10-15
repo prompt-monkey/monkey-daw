@@ -16,7 +16,7 @@ import { setLitePreference, toggleFullscreen, useShellStore, type LitePreference
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
 
-function TimeReadout() {
+function TimeReadout({ small = false }: { small?: boolean }) {
   const timeRef = useRef<HTMLSpanElement>(null)
   const barRef = useRef<HTMLSpanElement>(null)
 
@@ -28,14 +28,14 @@ function TimeReadout() {
   })
 
   return (
-    <div className="flex items-baseline gap-3 rounded-lg border border-line bg-bg px-3 py-1.5 font-mono">
-      <span ref={timeRef} className="text-lg text-accent" aria-label="Current time" />
+    <div className={`flex items-baseline gap-3 rounded-lg border border-line bg-bg font-mono ${small ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
+      <span ref={timeRef} className={`${small ? 'text-base' : 'text-lg'} text-accent`} aria-label="Current time" />
       <span ref={barRef} className="text-sm text-text-dim" aria-label="Bar and beat" />
     </div>
   )
 }
 
-function ProjectControls() {
+function ProjectControls({ menu }: { menu?: React.ReactNode }) {
   const name = useProjectStore((s) => s.project.name)
   const dirty = useIsDirty()
   const saving = useSessionStore((s) => s.saving)
@@ -45,11 +45,13 @@ function ProjectControls() {
   const setProjectsOpen = useViewStore((s) => s.setProjectsOpen)
   const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
   return (
-    <div className="flex items-center gap-2">
-      <button className={button} onClick={() => setProjectsOpen(true)} title="Open, save and manage projects (Ctrl+O)">
-        Projects
-      </button>
-      <span className="max-w-48 truncate text-sm font-semibold" title={name}>
+    <div className="flex min-w-0 items-center gap-2">
+      {menu ?? (
+        <button className={button} onClick={() => setProjectsOpen(true)} title="Open, save and manage projects (Ctrl+O)">
+          Projects
+        </button>
+      )}
+      <span className="max-w-48 min-w-0 truncate text-sm font-semibold" title={name}>
         {name}
       </span>
       <span
@@ -84,17 +86,62 @@ export function TransportBar() {
   const libraryOpen = useViewStore((s) => s.libraryOpen)
   const setLibraryOpen = useViewStore((s) => s.setLibraryOpen)
   const lyricsOpen = useViewStore((s) => s.lyricsOpen)
+  const automationWrite = useViewStore((s) => s.automationWrite)
+  const setAutomationWrite = useViewStore((s) => s.setAutomationWrite)
   const setLyricsOpen = useViewStore((s) => s.setLyricsOpen)
   const { fullscreen, litePreference, autoLite, narrow } = useShellStore()
   const liteLabel = (p: LitePreference) =>
     `${p === litePreference ? '✓' : '\u2003'} Lite mode: ${p === 'auto' ? `Auto (${autoLite ? 'on' : 'off'} now)` : p === 'on' ? 'On' : 'Off'}`
 
   const button = 'rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] hover:bg-surface disabled:opacity-40'
+  const view = useViewStore.getState()
+  const viewItems = [
+    { label: 'Keyboard shortcuts (?)', onSelect: () => view.setShortcutsOpen(true) },
+    { label: fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)', onSelect: () => void toggleFullscreen() },
+    ...(['auto', 'on', 'off'] as const).map((p) => ({ label: liteLabel(p), onSelect: () => setLitePreference(p) })),
+  ]
+  const check = (on: boolean) => (on ? '✓ ' : '\u2003 ')
+  // Phones: the panels, export and view options live in one menu, so the bar fits in three rows.
+  const phoneMenu = narrow ? (
+    <Menu
+      label="Menu"
+      className={button}
+      items={[
+        { label: 'Projects…', onSelect: () => view.setProjectsOpen(true) },
+        { label: `${check(libraryOpen)}Library`, onSelect: () => setLibraryOpen(!libraryOpen) },
+        { label: `${check(lyricsOpen)}Lyrics`, onSelect: () => setLyricsOpen(!lyricsOpen) },
+        { label: `${check(mixerOpen)}Mixer`, onSelect: () => setMixerOpen(!mixerOpen) },
+        { label: 'Export…', onSelect: () => setExportOpen(true) },
+        ...viewItems,
+      ]}
+    >
+      ☰
+    </Menu>
+  ) : undefined
+  const undoRedo = (
+    <>
+      <button className={button} onClick={undo} disabled={!canUndo} title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : 'Undo'} aria-label="Undo">
+        ↶
+      </button>
+      <button className={button} onClick={redo} disabled={!canRedo} title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : 'Redo'} aria-label="Redo">
+        ↷
+      </button>
+    </>
+  )
 
   return (
-    <header className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-line bg-surface px-3 py-2">
-      <ProjectControls />
-      <TimeReadout />
+    <header className={`flex flex-wrap items-center border-b border-line bg-surface ${narrow ? 'gap-1.5 px-2 py-1.5' : 'gap-x-2 gap-y-2 px-3 py-2'}`}>
+      {narrow ? (
+        <div className="flex w-full items-center gap-1.5">
+          <ProjectControls menu={phoneMenu} />
+          <span className="flex-1" />
+          {undoRedo}
+        </div>
+      ) : (
+        <ProjectControls />
+      )}
+      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      <TimeReadout small={narrow} />
       <button
         className={`rounded-md px-4 py-1.5 text-sm font-semibold ${playing ? 'bg-warn text-accent-ink' : 'bg-accent text-accent-ink'}`}
         onClick={togglePlay}
@@ -106,9 +153,17 @@ export function TransportBar() {
         Stop
       </button>
       <RecordControls />
+      <button
+        className={`${button} ${automationWrite ? 'border-danger text-danger' : ''}`}
+        onClick={() => setAutomationWrite(!automationWrite)}
+        aria-pressed={automationWrite}
+        title="Write automation (W): while playing, moving a fader, pan or knob records the movement"
+      >
+        {automationWrite ? '● Write' : 'Write'}
+      </button>
 
-      <div className="flex items-center gap-2 text-sm text-text-dim">
-        BPM
+      <div className="flex items-center gap-2 text-sm text-text-dim" title="Tempo in BPM">
+        {narrow ? '♩' : 'BPM'}
         <NumberField
           label="Tempo in BPM"
           value={bpm}
@@ -133,8 +188,8 @@ export function TransportBar() {
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-text-dim">
-        Time
+      <label className="flex items-center gap-2 text-sm text-text-dim" title="Time signature">
+        {!narrow && 'Time'}
         <select
           value={`${ts.beats}/${ts.unit}`}
           onChange={(e) => {
@@ -149,8 +204,8 @@ export function TransportBar() {
         </select>
       </label>
 
-      <label className="flex items-center gap-2 text-sm text-text-dim">
-        Snap
+      <label className="flex items-center gap-2 text-sm text-text-dim" title="Snap to the grid">
+        {!narrow && 'Snap'}
         <select
           value={snap}
           onChange={(e) => setSnap(e.target.value as SnapMode)}
@@ -182,65 +237,41 @@ export function TransportBar() {
         {!narrow && <span>s</span>}
       </div>
 
-      <div className="ml-auto flex flex-wrap gap-2">
-        <button
-          className={`${button} ${libraryOpen ? 'text-accent' : ''}`}
-          onClick={() => setLibraryOpen(!libraryOpen)}
-          aria-pressed={libraryOpen}
-          title="Show or hide the sample library"
-        >
-          Library
-        </button>
-        <button
-          className={`${button} ${lyricsOpen ? 'text-accent' : ''}`}
-          onClick={() => setLyricsOpen(!lyricsOpen)}
-          aria-pressed={lyricsOpen}
-          title="Show or hide the lyrics"
-        >
-          Lyrics
-        </button>
-        <button className={button} onClick={() => setExportOpen(true)} title="Export the mix or stems as WAV or MP3">
-          Export
-        </button>
-        {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
-        <button
-          className={`${button} ${mixerOpen ? 'text-accent' : ''}`}
-          onClick={() => setMixerOpen(!mixerOpen)}
-          aria-pressed={mixerOpen}
-          title="Show or hide the mixer"
-        >
-          Mixer
-        </button>
-        <Menu
-          label="View options"
-          className={button}
-          items={[
-            { label: 'Keyboard shortcuts (?)', onSelect: () => useViewStore.getState().setShortcutsOpen(true) },
-            { label: fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)', onSelect: () => void toggleFullscreen() },
-            ...(['auto', 'on', 'off'] as const).map((p) => ({ label: liteLabel(p), onSelect: () => setLitePreference(p) })),
-          ]}
-        >
-          View
-        </Menu>
-        <button
-          className={button}
-          onClick={undo}
-          disabled={!canUndo}
-          title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : 'Undo'}
-          aria-label="Undo"
-        >
-          ↶
-        </button>
-        <button
-          className={button}
-          onClick={redo}
-          disabled={!canRedo}
-          title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : 'Redo'}
-          aria-label="Redo"
-        >
-          ↷
-        </button>
-      </div>
+      {!narrow && (
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button
+            className={`${button} ${libraryOpen ? 'text-accent' : ''}`}
+            onClick={() => setLibraryOpen(!libraryOpen)}
+            aria-pressed={libraryOpen}
+            title="Show or hide the sample library"
+          >
+            Library
+          </button>
+          <button
+            className={`${button} ${lyricsOpen ? 'text-accent' : ''}`}
+            onClick={() => setLyricsOpen(!lyricsOpen)}
+            aria-pressed={lyricsOpen}
+            title="Show or hide the lyrics"
+          >
+            Lyrics
+          </button>
+          <button className={button} onClick={() => setExportOpen(true)} title="Export the mix or stems as WAV or MP3">
+            Export
+          </button>
+          <button
+            className={`${button} ${mixerOpen ? 'text-accent' : ''}`}
+            onClick={() => setMixerOpen(!mixerOpen)}
+            aria-pressed={mixerOpen}
+            title="Show or hide the mixer"
+          >
+            Mixer
+          </button>
+          <Menu label="View options" className={button} items={viewItems}>
+            View
+          </Menu>
+          {undoRedo}
+        </div>
+      )}
     </header>
   )
 }

@@ -38,6 +38,9 @@ interface ClipBase {
   gain: number
   fadeIn: number
   fadeOut: number
+  /** Bend of the fades, −1…1: 0 is a straight line, above 0 rises (or falls) fast, below slow. */
+  fadeInCurve?: number
+  fadeOutCurve?: number
 }
 
 /** A clip playing part of an audio asset. */
@@ -49,6 +52,22 @@ export interface AudioClip extends ClipBase {
    * own seconds, while `start`, `duration` and the fades are in timeline seconds.
    */
   sourceBpm?: number
+  /** Plays the audio backwards. `offset` still counts from the start of the asset. */
+  reversed?: boolean
+  /** Pitch shift in semitones (−24…24), without changing the length. */
+  pitch?: number
+  /**
+   * Set when notes were moved in the pitch editor: the original audio and the moves. The clip
+   * then plays `assetId`, the original with those moves rendered in.
+   */
+  pitchSource?: { assetId: Id; edits: PitchEdit[] }
+}
+
+/** A stretch of a recording (in its own seconds) moved by `shift` semitones in the pitch editor. */
+export interface PitchEdit {
+  start: number
+  end: number
+  shift: number
 }
 
 /**
@@ -124,6 +143,11 @@ export interface DrumPad {
   gain: number
   /** A one-shot that replaces the synthesized sound. */
   sample?: { assetId: Id }
+  /**
+   * Choke group, 1–4 (0 = none): a hit cuts off the other pads of its group that are still
+   * ringing, like a closed hi-hat stopping an open one.
+   */
+  choke: number
 }
 
 export interface DrumKit {
@@ -241,6 +265,7 @@ export interface Bus {
   muted: boolean
   effects: Effect[]
   fxBypass: boolean
+  automation: AutomationLane[]
 }
 
 /** Metadata of an audio file used by the project. The decoded audio lives in the engine. */
@@ -257,6 +282,15 @@ export interface MasterChannel {
   muted: boolean
   effects: Effect[]
   fxBypass: boolean
+  automation: AutomationLane[]
+}
+
+/** Anything with automation lanes: a track, a bus or the master (which has no pan). */
+export interface AutomatedChannel {
+  volume: number
+  pan?: number
+  effects: Effect[]
+  automation: AutomationLane[]
 }
 
 export type LyricSectionKind = 'intro' | 'verse' | 'pre-chorus' | 'chorus' | 'bridge' | 'solo' | 'outro'

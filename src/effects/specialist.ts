@@ -149,10 +149,24 @@ function amp(ctx: BaseAudioContext): EffectInstance {
   })
 }
 
+/** What auto-tune hears: the sung pitch (fractional MIDI) and the note it pulls toward. */
+export interface TunerReading {
+  midi: number
+  target: number
+}
+
 function autotune(ctx: BaseAudioContext): EffectInstance {
   const dw = dryWet(ctx)
   const node = workletNode(ctx, 'monkey-daw-autotune')
   dw.input.connect(node).connect(dw.wet)
+  let reading: TunerReading | null = null
+  let readAt = 0
+  if (node instanceof AudioWorkletNode) {
+    node.port.onmessage = (e: MessageEvent<TunerReading | null>) => {
+      reading = e.data
+      readAt = performance.now()
+    }
+  }
   const bindings = { ...workletBindings(node, ['retune', 'amount']), mix: dw.mixBindings }
   return instance(ctx, {
     input: dw.input,
@@ -164,6 +178,8 @@ function autotune(ctx: BaseAudioContext): EffectInstance {
       node.parameters.get('key')?.setValueAtTime(Number(p.key), ctx.currentTime)
       node.parameters.get('scale')?.setValueAtTime(Math.max(0, SCALE_KEYS.indexOf(p.scale as string)), ctx.currentTime)
     },
+    // A reading older than half a second is stale (the audio stopped).
+    monitor: () => (performance.now() - readAt < 500 ? reading : null),
     nodes: () => [...dw.nodes, node],
   })
 }

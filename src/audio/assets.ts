@@ -9,9 +9,25 @@ import { encodeWav } from './wav'
 export class AssetRegistry {
   private buffers = new Map<Id, AudioBuffer>()
   private sources = new Map<Id, Blob>()
+  private reversedBuffers = new Map<Id, AudioBuffer>()
 
   get(id: Id): AudioBuffer | undefined {
     return this.buffers.get(id)
+  }
+
+  /** The asset's audio backwards (made on first use and kept). */
+  getReversed(id: Id): AudioBuffer | undefined {
+    const cached = this.reversedBuffers.get(id)
+    if (cached) return cached
+    const buffer = this.buffers.get(id)
+    if (!buffer) return undefined
+    const reversed = new AudioBuffer({ length: buffer.length, numberOfChannels: buffer.numberOfChannels, sampleRate: buffer.sampleRate })
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+      const data = buffer.getChannelData(c).slice().reverse()
+      reversed.copyToChannel(data, c)
+    }
+    this.reversedBuffers.set(id, reversed)
+    return reversed
   }
 
   has(id: Id): boolean {

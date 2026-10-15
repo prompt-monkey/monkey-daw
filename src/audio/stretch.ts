@@ -3,9 +3,10 @@
 // the tempo for a moment) rather than going silent.
 
 import type { Id, Project } from '../model/types'
-import { clipRate } from '../model/tempo'
+import { clipPlayback } from '../model/tempo'
 import { isMidiClip } from '../model/types'
 import type { AssetRegistry } from './assets'
+import type { ClipEvent } from './schedule'
 
 /** Most stretched copies kept; the least recently used go first. */
 const CACHE_SIZE = 24
@@ -14,11 +15,12 @@ const cache = new Map<string, AudioBuffer>()
 const pending = new Map<string, Promise<AudioBuffer | null>>()
 const listeners = new Set<() => void>()
 
-const keyOf = (assetId: Id, rate: number) => `${assetId}@${rate.toFixed(5)}`
+const keyOf = (assetId: Id, rate: number, reversed = false) => `${assetId}${reversed ? ':rev' : ''}@${rate.toFixed(5)}`
+const needsStretch = (rate: number) => Math.abs(rate - 1) > 1e-4
 
-/** The stretched copy of an asset for a rate, if it's ready. */
-export function stretchedBuffer(assetId: Id, rate: number): AudioBuffer | undefined {
-  const key = keyOf(assetId, rate)
+/** The stretched copy of an asset (forwards or backwards) for a rate, if it's ready. */
+export function stretchedBuffer(assetId: Id, rate: number, reversed = false): AudioBuffer | undefined {
+  const key = keyOf(assetId, rate, reversed)
   const buffer = cache.get(key)
   if (buffer) {
     cache.delete(key)
@@ -47,14 +49,14 @@ function getWorker(): Worker {
   return worker
 }
 
-/** Makes (or returns) the stretched copy of an asset for a rate. */
-export function requestStretch(assets: AssetRegistry, assetId: Id, rate: number): Promise<AudioBuffer | null> {
-  const key = keyOf(assetId, rate)
+/** Makes (or returns) the stretched copy of an asset (forwards or backwards) for a rate. */
+export function requestStretch(assets: AssetRegistry, assetId: Id, rate: number, reversed = false): Promise<AudioBuffer | null> {
+  const key = keyOf(assetId, rate, reversed)
   const ready = cache.get(key)
   if (ready) return Promise.resolve(ready)
   const running = pending.get(key)
   if (running) return running
-  const source = assets.get(assetId)
+  const source = reversed ? assets.getReversed(assetId) : assets.get(assetId)
   if (!source) return Promise.resolve(null)
   const channels = Array.from({ length: source.numberOfChannels }, (_, i) => source.getChannelData(i).slice())
   const job = nextJob++
@@ -75,15 +77,18 @@ export function requestStretch(assets: AssetRegistry, assetId: Id, rate: number)
   return promise
 }
 
-/** The (asset, rate) pairs a project needs stretched: its synced clips, in Stretch mode. */
-export function neededStretches(project: Project): { assetId: Id; rate: number }[] {
-  if (project.syncMode !== 'stretch') return []
-  const seen = new Map<string, { assetId: Id; rate: number }>()
+/**
+ * The stretched copies a project needs: synced clips in Stretch mode, and pitch-shifted clips
+ * (forwards or backwards), once per asset, direction and rate.
+ */
+export function neededStretches(project: Project): { assetId: Id; rate: number; reversed: boolean }[] {
+  const seen = new Map<string, { assetId: Id; rate: number; reversed: boolean }>()
   for (const t of project.tracks) {
     for (const c of t.clips) {
       if (isMidiClip(c)) continue
-      const rate = clipRate(c, project.bpm)
-      if (Math.abs(rate - 1) > 1e-4) seen.set(keyOf(c.assetId, rate), { assetId: c.assetId, rate })
+      const { stretch } = clipPlayback(c, project.bpm, project.syncMode)
+      const reversed = c.reversed === true
+      if (needsStretch(stretch)) seen.set(keyOf(c.assetId, stretch, reversed), { assetId: c.assetId, rate: stretch, reversed })
     }
   }
   return [...seen.values()]
@@ -91,22 +96,25 @@ export function neededStretches(project: Project): { assetId: Id; rate: number }
 
 /** Starts stretching everything the project needs; resolves when all of it is ready. */
 export async function prepareStretches(project: Project, assets: AssetRegistry): Promise<void> {
-  await Promise.all(neededStretches(project).map((s) => requestStretch(assets, s.assetId, s.rate)))
+  await Promise.all(neededStretches(project).map((s) => requestStretch(assets, s.assetId, s.rate, s.reversed)))
+}
+
+/** What to play a clip voice from: a buffer, how much it is stretched, and its playback speed. */
+export interface ClipSource {
+  buffer: AudioBuffer
+  stretch: number
+  playbackRate: number
 }
 
 /**
- * The buffer to play a clip from, and whether it is already stretched. In Resample mode (or
- * while the stretched copy isn't ready) it is the original audio, played at the clip's rate.
+ * The buffer to play a clip event from. While a needed stretched copy isn't ready, the audio
+ * plays at the clip's tempo rate instead (right length and timing, pitch off for a moment).
  */
-export function clipBuffer(
-  project: Project,
-  assets: AssetRegistry,
-  assetId: Id,
-  rate: number,
-): { buffer: AudioBuffer; stretched: boolean } | null {
-  const buffer = assets.get(assetId)
+export function clipBuffer(assets: AssetRegistry, ev: ClipEvent): ClipSource | null {
+  const id = ev.clip.assetId
+  const buffer = ev.reversed ? assets.getReversed(id) : assets.get(id)
   if (!buffer) return null
-  if (project.syncMode !== 'stretch' || Math.abs(rate - 1) <= 1e-4) return { buffer, stretched: false }
-  const stretched = stretchedBuffer(assetId, rate)
-  return stretched ? { buffer: stretched, stretched: true } : { buffer, stretched: false }
+  if (!needsStretch(ev.stretch)) return { buffer, stretch: 1, playbackRate: ev.playbackRate }
+  const stretched = stretchedBuffer(id, ev.stretch, ev.reversed)
+  return stretched ? { buffer: stretched, stretch: ev.stretch, playbackRate: ev.playbackRate } : { buffer, stretch: 1, playbackRate: ev.rate }
 }

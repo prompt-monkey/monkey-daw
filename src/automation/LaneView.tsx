@@ -1,11 +1,11 @@
-// The automation lane editor, drawn over a track's clips.
+// The automation lane editor, drawn over a track's clips (or in a bus or master row).
 //   Click empty space to add a point (and keep dragging to place it). Drag points to move them;
 //   Alt places them freely, off the grid. Drag a segment's middle handle up or down to bend it,
 //   double-click the handle to straighten it. Double-click a point to delete it.
 
 import { memo } from 'react'
 import { snapTime } from '../model/grid'
-import type { AutomationPoint, Track } from '../model/types'
+import type { AutomatedChannel, AutomationPoint, Id } from '../model/types'
 import {
   addAutomationPoint,
   deleteAutomationPoint,
@@ -22,7 +22,9 @@ const PAD = 8
 const CURVE_STEPS = 24
 
 interface Props {
-  track: Track
+  channel: AutomatedChannel
+  /** The channel's id: a track or bus id, or 'master'. */
+  channelId: Id | 'master'
   target: string
   pps: number
   width: number
@@ -42,9 +44,9 @@ function startDrag(onMove: (ev: PointerEvent) => void) {
   window.addEventListener('pointercancel', end)
 }
 
-export const LaneView = memo(function LaneView({ track, target, pps, width, height, color }: Props) {
-  const resolved = resolveTarget(track, target)
-  const points: AutomationPoint[] = track.automation.find((l) => l.target === target)?.points ?? []
+export const LaneView = memo(function LaneView({ channel, channelId, target, pps, width, height, color }: Props) {
+  const resolved = resolveTarget(channel, target)
+  const points: AutomationPoint[] = channel.automation.find((l) => l.target === target)?.points ?? []
   if (!resolved) return null
 
   const usable = height - PAD * 2
@@ -77,14 +79,14 @@ export const LaneView = memo(function LaneView({ track, target, pps, width, heig
   }
 
   const dragPoint = (index: number, rect: DOMRect) => {
-    startDrag((ev) => moveAutomationPoint(track.id, target, index, snap(timeAt(ev.clientX, rect), ev.altKey), valueAtY(ev.clientY, rect)))
+    startDrag((ev) => moveAutomationPoint(channelId, target, index, snap(timeAt(ev.clientX, rect), ev.altKey), valueAtY(ev.clientY, rect)))
   }
 
   const onBackgroundDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return
     e.preventDefault()
     const rect = e.currentTarget.getBoundingClientRect()
-    const index = addAutomationPoint(track.id, target, {
+    const index = addAutomationPoint(channelId, target, {
       time: snap(timeAt(e.clientX, rect), e.altKey),
       value: valueAtY(e.clientY, rect),
       curve: 0,
@@ -136,11 +138,11 @@ export const LaneView = memo(function LaneView({ track, target, pps, width, heig
               e.stopPropagation()
               e.preventDefault()
               const rect = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect()
-              startDrag((ev) => setAutomationCurve(track.id, target, i, curveForMidpoint(p, next, valueAtY(ev.clientY, rect))))
+              startDrag((ev) => setAutomationCurve(channelId, target, i, curveForMidpoint(p, next, valueAtY(ev.clientY, rect))))
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
-              setAutomationCurve(track.id, target, i, 0)
+              setAutomationCurve(channelId, target, i, 0)
               useProjectStore.getState().endGesture()
             }}
           >
@@ -167,7 +169,7 @@ export const LaneView = memo(function LaneView({ track, target, pps, width, heig
           }}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            deleteAutomationPoint(track.id, target, i)
+            deleteAutomationPoint(channelId, target, i)
           }}
         >
           <title>{`${resolved.format(p.value)} · drag to move (Alt: off the grid) · double-click to delete`}</title>

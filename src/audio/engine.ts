@@ -48,6 +48,7 @@ export class AudioEngine {
   /** In pattern mode only this clip plays, looping over its length. */
   private pattern: Id | null = null
   private stretchTimer: ReturnType<typeof setTimeout> | null = null
+  private writing = new Set<string>()
   /** Seconds of audio kept scheduled ahead of the clock (longer in lite mode). */
   private lookahead = 0.12
 
@@ -78,6 +79,23 @@ export class AudioEngine {
     return this.mix?.readMeter(channelId) ?? null
   }
 
+  /**
+   * Marks a lane ("channel|target") as being written: playback leaves it alone so the control's
+   * live value is heard instead of the old automation.
+   */
+  setWriting(key: string, on: boolean) {
+    if (on === this.writing.has(key)) return
+    if (on) this.writing.add(key)
+    else this.writing.delete(key)
+    this.mix?.setWriting(this.writing)
+    this.mix?.sync(this.project, false, this.planner ? null : this.restingPosition)
+  }
+
+  /** An effect's live reading (auto-tune's note), or null before audio has started. */
+  effectMonitor(channelId: Id | 'master', effectId: Id): unknown {
+    return this.mix?.effectMonitor(channelId, effectId) ?? null
+  }
+
   setProject(project: Project) {
     const prev = this.project
     this.project = project
@@ -100,6 +118,7 @@ export class AudioEngine {
     await ensureEffectWorklets(ctx)
     this.stopVoices()
     this.mix ??= new MixGraph(ctx)
+    this.mix.setWriting(this.writing)
     this.mix.sync(this.project, true)
     this.ignoreLoop = ignoreLoop
     this.pattern = pattern
@@ -197,9 +216,9 @@ export class AudioEngine {
       mix.scheduleAutomation(project, window, ctxOffset)
       mix.scheduleEffects(project, window, ctxOffset)
       for (const ev of clipEvents(project, window)) {
-        const source = clipBuffer(project, this.assets, ev.clip.assetId, ev.rate)
+        const source = clipBuffer(this.assets, ev)
         if (!source) continue
-        const voice = mix.playClip(ev, source.buffer, ev.at + ctxOffset, () => this.voices.delete(voice!), source.stretched)
+        const voice = mix.playClip(ev, source, ev.at + ctxOffset, () => this.voices.delete(voice!))
         if (voice) this.voices.add(voice)
       }
       for (const ev of noteEvents(project, window)) {

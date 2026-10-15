@@ -8,6 +8,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
       ['Space', 'Play / pause'],
       ['R', 'Record on the armed track'],
       ['K', 'Metronome on / off'],
+      ['W', 'Write automation: moving controls while playing records them'],
       ['Click the ruler', 'Move the playhead'],
     ],
   },

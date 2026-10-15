@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { EFFECTS } from '../effects/definitions'
-import type { Bus, Effect, Id, Track } from '../model/types'
+import type { Bus, Effect, Id, Project, Track } from '../model/types'
 import {
   removeBus,
   renameBus,
@@ -29,7 +29,14 @@ const AutoBadge = () => (
   </span>
 )
 
-const AUTOMATED_TITLE = 'Automated: edit the lane on the timeline'
+const AUTOMATED_TITLE = 'Automated: edit the lane on the timeline, or turn on Write and move it while playing'
+const WRITING_TITLE = 'Write is on: moving this while playing records automation'
+
+/** Automated controls can only be moved by hand while writing automation. */
+const useLocked = (automated: boolean) => {
+  const write = useViewStore((s) => s.automationWrite)
+  return automated && !write
+}
 
 function Fader({
   label,
@@ -43,6 +50,7 @@ function Fader({
   automated?: boolean
 }) {
   const endGesture = useProjectStore((s) => s.endGesture)
+  const locked = useLocked(automated)
   return (
     <input
       type="range"
@@ -50,14 +58,14 @@ function Fader({
       max={1}
       step={0.001}
       value={gainToFader(gain)}
-      disabled={automated}
+      disabled={locked}
       onChange={(e) => onChange(faderToGain(Number(e.target.value)))}
       onPointerUp={endGesture}
       onKeyUp={endGesture}
-      onDoubleClick={() => !automated && onChange(1)}
+      onDoubleClick={() => !locked && onChange(1)}
       aria-label={`${label} volume`}
-      title={automated ? AUTOMATED_TITLE : 'Double-click for 0 dB'}
-      className={`h-full w-6 ${automated ? 'cursor-default' : 'cursor-pointer'}`}
+      title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Double-click for 0 dB'}
+      className={`h-full w-6 ${locked ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
     />
   )
@@ -75,6 +83,7 @@ function PanSlider({
   automated?: boolean
 }) {
   const endGesture = useProjectStore((s) => s.endGesture)
+  const locked = useLocked(automated)
   return (
     <label className="flex flex-col gap-0.5 text-[10px] text-text-dim">
       <span className="flex justify-between">
@@ -90,13 +99,13 @@ function PanSlider({
         max={1}
         step={0.01}
         value={pan}
-        disabled={automated}
+        disabled={locked}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={endGesture}
         onKeyUp={endGesture}
-        onDoubleClick={() => !automated && onChange(0)}
+        onDoubleClick={() => !locked && onChange(0)}
         aria-label={`${label} pan`}
-        title={automated ? AUTOMATED_TITLE : 'Double-click to center'}
+        title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Double-click to center'}
       />
     </label>
   )
@@ -248,7 +257,28 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
   )
 })
 
+/** Shows a bus's or the master's automation as a row under the tracks. */
+function AutomationButton({ channelId, channel }: { channelId: Id | 'master'; channel: Bus | Project['master'] }) {
+  const shown = useViewStore((s) => Boolean(s.automationView[channelId]))
+  return (
+    <button
+      onClick={() => {
+        const view = useViewStore.getState()
+        const withPoints = channel.automation.find((l) => l.points.length > 0)
+        view.setAutomationView(channelId, shown ? null : (withPoints?.target ?? 'volume'))
+      }}
+      className={`${small} ${shown ? 'bg-accent text-accent-ink' : ''}`}
+      aria-pressed={shown}
+      title={shown ? 'Hide the automation row' : 'Show automation on the timeline (under the tracks)'}
+    >
+      A
+    </button>
+  )
+}
+
 export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sources: string[] }) {
+  const autoVolume = useAutomatedValue(bus, 'volume')
+  const autoPan = useAutomatedValue(bus, 'pan')
   return (
     <StripFrame color="var(--color-text-dim)">
       <div className="flex items-center gap-1">
@@ -267,8 +297,19 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
       <div className="line-clamp-3 text-[10px] text-text-dim" title={sources.join(', ')}>
         {sources.length ? `From: ${sources.join(', ')}` : 'No tracks feed this bus yet'}
       </div>
-      <PanSlider label={bus.name} pan={bus.pan} onChange={(v) => setPan(bus.id, v)} />
-      <FaderSection channelId={bus.id} label={bus.name} gain={bus.volume} onChange={(g) => setVolume(bus.id, g)} />
+      <PanSlider
+        label={bus.name}
+        pan={autoPan === null ? bus.pan : autoPan * 2 - 1}
+        onChange={(v) => setPan(bus.id, v)}
+        automated={autoPan !== null}
+      />
+      <FaderSection
+        channelId={bus.id}
+        label={bus.name}
+        gain={autoVolume === null ? bus.volume : faderToGain(autoVolume)}
+        onChange={(g) => setVolume(bus.id, g)}
+        automated={autoVolume !== null}
+      />
       <div className="flex justify-center gap-1">
         <button
           onClick={() => toggleMute(bus.id)}
@@ -279,6 +320,7 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
           M
         </button>
         <FxButton channel={bus.id} effects={bus.effects} bypassed={bus.fxBypass} />
+        <AutomationButton channelId={bus.id} channel={bus} />
       </div>
     </StripFrame>
   )
@@ -286,11 +328,18 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
 
 export function MasterStrip() {
   const master = useProjectStore((s) => s.project.master)
+  const autoVolume = useAutomatedValue(master, 'volume')
   return (
     <div className="flex h-full w-40 shrink-0 flex-col gap-2 border-l border-line bg-surface px-3 py-2">
       <div className="text-xs font-semibold">Master</div>
       <VuMeter className="h-16 w-full rounded-md border border-line bg-bg" />
-      <FaderSection channelId="master" label="Master" gain={master.volume} onChange={setMasterVolume} />
+      <FaderSection
+        channelId="master"
+        label="Master"
+        gain={autoVolume === null ? master.volume : faderToGain(autoVolume)}
+        onChange={setMasterVolume}
+        automated={autoVolume !== null}
+      />
       <div className="flex justify-center gap-1">
         <button
           onClick={toggleMasterMute}
@@ -301,6 +350,7 @@ export function MasterStrip() {
           M
         </button>
         <FxButton channel="master" effects={master.effects} bypassed={master.fxBypass} />
+        <AutomationButton channelId="master" channel={master} />
       </div>
     </div>
   )

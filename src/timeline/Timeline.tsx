@@ -13,6 +13,7 @@ import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
 import { toast } from '../ui/toast'
 import { ClipMenu, type ClipMenuState } from './ClipMenu'
 import { ClipView, type ClipHandle } from './ClipView'
+import { ChannelLaneRow } from '../automation/ChannelLaneRow'
 import { LaneView } from '../automation/LaneView'
 import { LiveTake } from './LiveTake'
 import { trackColor } from './colors'
@@ -150,6 +151,11 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
     (clip: Clip) => applyClipEdits('Reset clip gain', [{ clipId: clip.id, trackId: track.id, fields: { gain: 1 } }]),
     [track.id],
   )
+  const onResetFadeCurve = useCallback(
+    (clip: Clip, key: 'fadeInCurve' | 'fadeOutCurve') =>
+      applyClipEdits('Straighten fade', [{ clipId: clip.id, trackId: track.id, fields: { [key]: 0 } }]),
+    [track.id],
+  )
   const onOpen = useCallback(
     (clip: Clip) => isMidiClip(clip) && useViewStore.getState().openPianoRoll(track.id, clip.id),
     [track.id],
@@ -189,13 +195,14 @@ function Lane({ track, index, width, height, grid, pps, selection, gestureContex
           selected={selection.includes(clip.id)}
           onPointerDown={onClipDown}
           onResetGain={onResetGain}
+          onResetFadeCurve={onResetFadeCurve}
           onOpen={onOpen}
           onMenu={onMenu}
           noteRows={track.kit?.pads.map((p) => p.note)}
         />
       ))}
       <LiveTake trackId={track.id} pps={pps} height={height} />
-      {laneTarget && <LaneView track={track} target={laneTarget} pps={pps} width={width} height={height} color={color} />}
+      {laneTarget && <LaneView channel={track} channelId={track.id} target={laneTarget} pps={pps} width={width} height={height} color={color} />}
     </div>
   )
 }
@@ -399,6 +406,24 @@ export function Timeline() {
               />
             </div>
           ))}
+
+          {/* Automation rows of buses and the master, under the tracks. */}
+          {[...project.buses.map((b) => ({ id: b.id, name: b.name, channel: b })), { id: 'master', name: 'Master', channel: project.master }]
+            .filter((c) => automationView[c.id])
+            .map((c) => (
+              <ChannelLaneRow
+                key={c.id}
+                channelId={c.id}
+                name={c.name}
+                channel={c.channel}
+                target={automationView[c.id]}
+                headerWidth={headerWidth}
+                width={laneWidth}
+                height={rowHeight}
+                pps={pps}
+                grid={grid}
+              />
+            ))}
 
           {project.loop.enabled && (
             <div

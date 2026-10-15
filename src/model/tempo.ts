@@ -1,7 +1,7 @@
 // Tempo sync: an audio clip with an original tempo (usually read from its file name) plays at
 // project BPM ÷ original BPM, so loops fit the project's tempo.
 
-import { isMidiClip, type Clip } from './types'
+import { isMidiClip, type AudioClip, type Clip, type SyncMode } from './types'
 
 export const MIN_SOURCE_BPM = 40
 export const MAX_SOURCE_BPM = 300
@@ -34,6 +34,20 @@ export function detectBpm(name: string, duration?: number): number | null {
     if (bpm >= 60 && bpm <= 200 && fitsBeats(duration, bpm)) return bpm
   }
   return null
+}
+
+export const MAX_PITCH_SHIFT = 24
+
+/**
+ * How a clip's audio is played: `rate` is audio seconds per timeline second (tempo sync),
+ * `playbackRate` is the speed the buffer is played at (which sets the pitch), and `stretch` is
+ * how much the audio must be time-stretched first (1 = not at all). The pitch shift and, in
+ * Resample mode, the tempo rate move the pitch; the rest is made up by stretching.
+ */
+export function clipPlayback(clip: AudioClip, bpm: number, syncMode: SyncMode): { rate: number; playbackRate: number; stretch: number } {
+  const rate = clipRate(clip, bpm)
+  const playbackRate = 2 ** ((clip.pitch ?? 0) / 12) * (syncMode === 'resample' ? rate : 1)
+  return { rate, playbackRate, stretch: rate / playbackRate }
 }
 
 /** Seconds of the clip's audio played per second of timeline (1 when the clip isn't synced). */

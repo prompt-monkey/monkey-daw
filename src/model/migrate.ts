@@ -6,9 +6,9 @@ import { DRUM_VOICES, PADS, createKit, presetName } from '../drums/kits'
 import { createProject } from './factory'
 import { resolveTarget } from '../automation/targets'
 import { MAX_PITCH, MIN_NOTE_LENGTH, sortNotes } from './midi'
-import { MAX_SOURCE_BPM, MIN_SOURCE_BPM } from './tempo'
+import { MAX_PITCH_SHIFT, MAX_SOURCE_BPM, MIN_SOURCE_BPM } from './tempo'
 import { LYRIC_KINDS } from '../lyrics/lyrics'
-import { clipFitsTrack, isMidiClip, type AudioClip, type LyricSection, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
+import { clipFitsTrack, isMidiClip, type PitchEdit, type AudioClip, type AutomatedChannel, type LyricSection, type DrumKit, type DrumPad, type AutomationLane, type Bus, type Clip, type Effect, type Instrument, type MidiClip, type Note, type Project, type Track } from './types'
 
 export class InvalidProjectError extends Error {}
 
@@ -64,6 +64,7 @@ function normalizeKit(raw: unknown): DrumKit {
       tune: clampNum(p.tune, 0, -12, 12),
       decay: clampNum(p.decay, 1, 0.25, 4),
       gain: clampNum(p.gain, 1, 0, 2),
+      choke: Math.round(clampNum(p.choke, known?.choke ?? 0, 0, 4)),
     }
     const sample = p.sample as Loose<NonNullable<DrumPad['sample']>> | undefined
     if (typeof sample?.assetId === 'string') pad.sample = { assetId: sample.assetId }
@@ -95,12 +96,34 @@ function normalizeClip(raw: Loose<Clip>): Clip | null {
     gain: num(raw.gain, 1),
     fadeIn: Math.max(0, num(raw.fadeIn, 0)),
     fadeOut: Math.max(0, num(raw.fadeOut, 0)),
+    ...curve('fadeInCurve', raw.fadeInCurve),
+    ...curve('fadeOutCurve', raw.fadeOutCurve),
+    ...(!Array.isArray(notes) && raw.reversed === true ? { reversed: true } : {}),
+    ...(!Array.isArray(notes) ? pitchSource((raw as Loose<AudioClip>).pitchSource) : {}),
+    ...(!Array.isArray(notes) && typeof raw.pitch === 'number' && raw.pitch !== 0
+      ? { pitch: Math.max(-MAX_PITCH_SHIFT, Math.min(MAX_PITCH_SHIFT, raw.pitch)) }
+      : {}),
   }
+}
+
+/** The pitch editor's source and moves, kept only when valid. */
+function pitchSource(v: unknown): Pick<AudioClip, 'pitchSource'> {
+  const r = v as Loose<NonNullable<AudioClip['pitchSource']>> | undefined
+  if (typeof r?.assetId !== 'string' || !Array.isArray(r.edits)) return {}
+  const edits = (r.edits as Loose<PitchEdit>[])
+    .filter((e) => [e?.start, e?.end, e?.shift].every((n) => typeof n === 'number' && Number.isFinite(n)) && e.end! > e.start!)
+    .map((e) => ({ start: e.start!, end: e.end!, shift: Math.max(-24, Math.min(24, e.shift!)) }))
+  return { pitchSource: { assetId: r.assetId, edits } }
+}
+
+/** A fade curve field, left out when straight. */
+function curve(key: 'fadeInCurve' | 'fadeOutCurve', v: unknown): Partial<Record<typeof key, number>> {
+  return typeof v === 'number' && Number.isFinite(v) && v !== 0 ? { [key]: Math.max(-1, Math.min(1, v)) } : {}
 }
 
 function normalizeBus(raw: Loose<Bus>): Bus | null {
   if (typeof raw.id !== 'string') return null
-  return {
+  const bus: Bus = {
     id: raw.id,
     name: str(raw.name, 'Bus'),
     volume: num(raw.volume, 1),
@@ -108,7 +131,10 @@ function normalizeBus(raw: Loose<Bus>): Bus | null {
     muted: bool(raw.muted),
     effects: effects(raw.effects),
     fxBypass: bool(raw.fxBypass),
+    automation: [],
   }
+  bus.automation = lanes(raw.automation, bus)
+  return bus
 }
 
 function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
@@ -145,8 +171,8 @@ function normalizeTrack(raw: Loose<Track>, busIds: Set<string>): Track | null {
   return track
 }
 
-/** Valid lanes only: targets that still exist on the track, one lane per target, clean points. */
-function lanes(v: unknown, track: Track): AutomationLane[] {
+/** Valid lanes only: targets that still exist on the channel, one lane per target, clean points. */
+function lanes(v: unknown, track: AutomatedChannel): AutomationLane[] {
   if (!Array.isArray(v)) return []
   const seen = new Set<string>()
   const out: AutomationLane[] = []
@@ -164,6 +190,18 @@ function lanes(v: unknown, track: Track): AutomationLane[] {
     out.push({ target: raw.target, points })
   }
   return out
+}
+
+function normalizeMaster(raw: Loose<Project['master']>): Project['master'] {
+  const master: Project['master'] = {
+    volume: num(raw.volume, 1),
+    muted: bool(raw.muted),
+    effects: effects(raw.effects),
+    fxBypass: bool(raw.fxBypass),
+    automation: [],
+  }
+  master.automation = lanes(raw.automation, master)
+  return master
 }
 
 export function normalizeProject(input: unknown): Project {
@@ -186,7 +224,7 @@ export function normalizeProject(input: unknown): Project {
     snap: raw.snap === 'off' || raw.snap === 'bar' ? raw.snap : 'beat',
     syncMode: raw.syncMode === 'resample' ? 'resample' : 'stretch',
     loop: { enabled: bool(loop.enabled), start: num(loop.start, 0), end: num(loop.end, 8) },
-    master: { volume: num(master.volume, 1), muted: bool(master.muted), effects: effects(master.effects), fxBypass: bool(master.fxBypass) },
+    master: normalizeMaster(master),
     tracks: raw.tracks.map((t) => normalizeTrack(t as Loose<Track>, busIds)).filter((t) => t !== null),
     buses,
     assets: raw.assets && typeof raw.assets === 'object' ? (raw.assets as Project['assets']) : {},
@@ -200,7 +238,12 @@ export function normalizeProject(input: unknown): Project {
 export function usedAssetIds(project: Project): string[] {
   const ids = new Set<string>()
   for (const t of project.tracks) {
-    for (const c of t.clips) if (!isMidiClip(c)) ids.add(c.assetId)
+    for (const c of t.clips) {
+      if (isMidiClip(c)) continue
+      ids.add(c.assetId)
+      // The original audio stays with a pitch-edited clip, so it can be edited again.
+      if (c.pitchSource) ids.add(c.pitchSource.assetId)
+    }
     if (t.instrument?.sample) ids.add(t.instrument.sample.assetId)
     for (const pad of t.kit?.pads ?? []) if (pad.sample) ids.add(pad.sample.assetId)
   }

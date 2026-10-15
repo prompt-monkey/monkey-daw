@@ -36,10 +36,14 @@ interface ViewStore {
   libraryOpen: boolean
   lyricsOpen: boolean
   shortcutsOpen: boolean
+  /** While playing, moving a fader, pan or knob records automation. */
+  automationWrite: boolean
   /** What the bottom panel shows. */
   bottomPanel: BottomPanelView
   /** The MIDI clip open in the piano roll. */
   pianoRoll: { trackId: Id; clipId: Id } | null
+  /** The audio clip open in the pitch editor. */
+  pitchClip: Id | null
   /** PAT: while the piano roll is shown, play only its clip, looping. SONG: play the project. */
   patternMode: boolean
   /** Channel whose effect chain the rack shows. */
@@ -60,9 +64,12 @@ interface ViewStore {
   setLibraryOpen: (open: boolean) => void
   setLyricsOpen: (open: boolean) => void
   setShortcutsOpen: (open: boolean) => void
+  setAutomationWrite: (on: boolean) => void
   setBottomPanel: (panel: BottomPanelView) => void
   /** Opens a MIDI clip in the piano roll. */
   openPianoRoll: (trackId: Id, clipId: Id) => void
+  /** Opens an audio clip in the pitch editor. */
+  openPitchEditor: (clipId: Id) => void
   setPatternMode: (on: boolean) => void
   /** Shows a channel's effects in the bottom panel. */
   openRack: (channel: Id | 'master') => void
@@ -70,7 +77,7 @@ interface ViewStore {
   setAutomationView: (trackId: Id, target: string | null) => void
 }
 
-export type BottomPanelView = 'mixer' | 'effects' | 'pianoRoll'
+export type BottomPanelView = 'mixer' | 'effects' | 'pianoRoll' | 'pitch'
 
 export const useViewStore = create<ViewStore>()((set) => ({
   pps: DEFAULT_PPS,
@@ -86,8 +93,10 @@ export const useViewStore = create<ViewStore>()((set) => ({
   libraryOpen: true,
   lyricsOpen: false,
   shortcutsOpen: false,
+  automationWrite: false,
   bottomPanel: 'mixer',
   pianoRoll: null,
+  pitchClip: null,
   patternMode: true,
   rackChannel: 'master',
   automationView: {},
@@ -106,8 +115,10 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
   setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  setAutomationWrite: (automationWrite) => set({ automationWrite }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel }),
   openPianoRoll: (trackId, clipId) => set({ pianoRoll: { trackId, clipId }, bottomPanel: 'pianoRoll', mixerOpen: true }),
+  openPitchEditor: (pitchClip) => set({ pitchClip, bottomPanel: 'pitch', mixerOpen: true }),
   setPatternMode: (patternMode) => set({ patternMode }),
   openRack: (rackChannel) => set({ rackChannel, bottomPanel: 'effects', mixerOpen: true }),
   setAutomationView: (trackId, target) =>

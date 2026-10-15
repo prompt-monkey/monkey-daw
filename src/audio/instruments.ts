@@ -93,6 +93,8 @@ export interface NoteToPlay {
 
 export interface InstrumentVoice {
   stop: () => void
+  /** Fades the voice out quickly from `when` (drum choke groups). */
+  choke?: (when: number) => void
   /** Called once the voice has finished, release included. */
   onEnded?: () => void
 }

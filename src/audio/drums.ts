@@ -78,6 +78,8 @@ function noise(ctx: BaseAudioContext): AudioBuffer {
 }
 
 const SILENT = 0.0001
+/** Seconds a choked pad takes to fade out. */
+const CHOKE_FADE = 0.006
 
 /** Plays one hit of a pad at `when` (AudioContext time) into `destination`. */
 export function playDrumPad(
@@ -92,6 +94,7 @@ export function playDrumPad(
   const pitch = 2 ** (pad.tune / 12)
   const sources: AudioScheduledSourceNode[] = []
   const nodes: AudioNode[] = []
+  const amps: GainNode[] = []
 
   if (pad.sample && sample) {
     const src = ctx.createBufferSource()
@@ -103,6 +106,7 @@ export function playDrumPad(
     src.start(when)
     sources.push(src)
     nodes.push(amp)
+    amps.push(amp)
   } else {
     for (const layer of VOICES[pad.voice]) {
       const decay = layer.decay * pad.decay
@@ -150,6 +154,7 @@ export function playDrumPad(
       src.stop(end + 0.02)
       sources.push(src)
       nodes.push(amp)
+      amps.push(amp)
     }
   }
 
@@ -161,6 +166,20 @@ export function playDrumPad(
     for (const n of nodes) n.disconnect()
   }
   const voice: InstrumentVoice = {
+    choke: (at: number) => {
+      // A 6 ms fade, then stop: quick enough to sound cut, slow enough not to click.
+      for (const amp of amps) {
+        amp.gain.cancelScheduledValues(at)
+        amp.gain.setTargetAtTime(0, at, CHOKE_FADE / 3)
+      }
+      for (const s of sources) {
+        try {
+          s.stop(at + CHOKE_FADE * 2)
+        } catch {
+          // Already stopped.
+        }
+      }
+    },
     stop: () => {
       for (const s of sources) {
         try {

@@ -2,7 +2,7 @@
 // window of timeline time, and with what gain envelope. No Web Audio calls in this file.
 
 import { beatSeconds } from '../model/midi'
-import { clipRate } from '../model/tempo'
+import { clipPlayback } from '../model/tempo'
 import { isMidiClip, type AudioClip, type Clip, type Id, type LoopRegion, type Project, type Track } from '../model/types'
 
 /** One audio clip (or the remaining part of one) to be played as a single voice. */
@@ -19,6 +19,12 @@ export interface ClipEvent {
   duration: number
   /** Seconds of audio per second of timeline: above 1 a synced clip plays faster than recorded. */
   rate: number
+  /** Speed the buffer plays at, which sets the pitch (see clipPlayback). */
+  playbackRate: number
+  /** How much the audio is time-stretched before playing (1 = not at all). */
+  stretch: number
+  /** Plays the reversed audio; `assetOffset` is then a position in the reversed asset. */
+  reversed: boolean
 }
 
 export interface ScheduleWindow {
@@ -55,8 +61,14 @@ export function clipEvents(project: Project, w: ScheduleWindow): ClipEvent[] {
       const duration = Math.min(clipEnd, cutAt) - at
       if (duration <= EPSILON) continue
       const clipTime = at - clip.start
-      const rate = clipRate(clip, project.bpm)
-      events.push({ trackId: track.id, clip, at, clipTime, assetOffset: clip.offset + clipTime * rate, duration, rate })
+      const { rate, playbackRate, stretch } = clipPlayback(clip, project.bpm, project.syncMode)
+      const reversed = clip.reversed === true
+      // Backwards, the clip's window of audio [offset, offset + length] is read from its end.
+      const assetDuration = project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration * rate
+      const assetOffset = reversed
+        ? assetDuration - clip.offset - clip.duration * rate + clipTime * rate
+        : clip.offset + clipTime * rate
+      events.push({ trackId: track.id, clip, at, clipTime, assetOffset, duration, rate, playbackRate, stretch, reversed })
     }
   }
   return events
@@ -155,13 +167,26 @@ export interface EnvelopePoint {
   value: number
 }
 
+/**
+ * A fade's level at `x` (0 → 1 through the fade). Curve 0 is a straight line; above 0 it rises
+ * fast and eases in (like an exponential fade-in); below 0 it starts slow.
+ */
+export function fadeShape(x: number, curve = 0): number {
+  const v = Math.min(1, Math.max(0, x))
+  if (curve === 0) return v
+  return curve > 0 ? v ** (1 / (1 + 3 * curve)) : v ** (1 - 3 * curve)
+}
+
 /** Clip gain with fades at a clip-local time. */
 export function clipGainAt(clip: Clip, t: number): number {
   let f = 1
-  if (clip.fadeIn > 0) f = Math.min(f, t / clip.fadeIn)
-  if (clip.fadeOut > 0) f = Math.min(f, (clip.duration - t) / clip.fadeOut)
+  if (clip.fadeIn > 0) f = Math.min(f, fadeShape(t / clip.fadeIn, clip.fadeInCurve))
+  if (clip.fadeOut > 0) f = Math.min(f, fadeShape((clip.duration - t) / clip.fadeOut, clip.fadeOutCurve))
   return clip.gain * Math.max(0, Math.min(1, f))
 }
+
+/** Points per curved fade in a gain envelope (straight fades need none). */
+const CURVE_STEPS = 16
 
 /**
  * Piecewise-linear gain envelope for a voice: clip gain, fade-in/out, plus a short declick
@@ -180,6 +205,18 @@ export function gainEnvelope(ev: ClipEvent): EnvelopePoint[] {
   const times = [lo, hi]
   for (const b of [clip.fadeIn, clip.duration - clip.fadeOut]) {
     if (b > lo + EPSILON && b < hi - EPSILON) times.push(b)
+  }
+  // Curved fades are followed with extra points (the envelope itself is piecewise linear).
+  const curved: [number, number, number | undefined][] = [
+    [0, clip.fadeIn, clip.fadeInCurve],
+    [clip.duration - clip.fadeOut, clip.duration, clip.fadeOutCurve],
+  ]
+  for (const [from, to, curve] of curved) {
+    if (!curve || to - from <= EPSILON) continue
+    for (let i = 1; i < CURVE_STEPS; i++) {
+      const t = from + ((to - from) * i) / CURVE_STEPS
+      if (t > lo + EPSILON && t < hi - EPSILON) times.push(t)
+    }
   }
   times.sort((a, b) => a - b)
 

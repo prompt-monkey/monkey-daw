@@ -19,7 +19,8 @@ function isTyping(target: EventTarget | null): boolean {
  * Global shortcuts:
  * Space play/pause · Ctrl+Z undo · Ctrl+Y / Ctrl+Shift+Z redo · Delete/Backspace delete clips ·
  * Ctrl+D duplicate · Ctrl+C / Ctrl+V copy/paste at the playhead · Ctrl+A select all · Esc deselect ·
- * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome · F fullscreen ·
+ * Ctrl+Shift+B add bus · Ctrl+S save · Ctrl+O projects · R record · K metronome · W write
+ * automation · F fullscreen ·
  * ? shortcuts guide
  */
 export function useShortcuts() {
@@ -48,6 +49,9 @@ export function useShortcuts() {
       } else if (!mod && e.key === '?') {
         handled()
         view.setShortcutsOpen(true)
+      } else if (!mod && key === 'w') {
+        handled()
+        view.setAutomationWrite(!view.automationWrite)
       } else if (!mod && key === 'f') {
         handled()
         void toggleFullscreen()

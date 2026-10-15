@@ -6,19 +6,22 @@ import { createBus, createClip, createId, createMidiClip, createTrack } from '..
 import { createKit } from '../drums/kits'
 import { secondsPerBar } from '../model/grid'
 import { beatSeconds, notesEnd, sortNotes } from '../model/midi'
-import { MAX_SOURCE_BPM, MIN_SOURCE_BPM, clipRate, detectBpm } from '../model/tempo'
+import { MAX_PITCH_SHIFT, MAX_SOURCE_BPM, MIN_SOURCE_BPM, clipRate, detectBpm } from '../model/tempo'
 import { MAX_GAIN } from '../model/levels'
 import { EFFECTS, createEffect, findParam, normalizeParam } from '../effects/definitions'
 import { insertPoint } from '../automation/curve'
-import { resolveTarget } from '../automation/targets'
+import { effectTarget, resolveTarget } from '../automation/targets'
+import { writeAutomation } from '../automation/write'
 import {
   clipFitsTrack,
   isMidiClip,
   type AssetMeta,
+  type AutomatedChannel,
   type AutomationLane,
   type AutomationPoint,
   type AutomationTarget,
   type Bus,
+  type AudioClip,
   type Clip,
   type DrumPad,
   type Effect,
@@ -30,6 +33,7 @@ import {
   type MidiClip,
   type Note,
   type OutputTarget,
+  type PitchEdit,
   type Project,
   type SnapMode,
   type SyncMode,
@@ -107,26 +111,24 @@ export function renameTrack(trackId: Id, name: string) {
   })
 }
 
+// Volume, pan and effect knobs also record automation while writing (see automation/write.ts).
+
 export function setVolume(channelId: Id, volume: number) {
-  update(
-    'Change volume',
-    (p) => {
-      const c = findChannel(p, channelId)
-      if (c) c.volume = clamp(volume, 0, MAX_GAIN)
-    },
-    `volume:${channelId}`,
-  )
+  const value = clamp(volume, 0, MAX_GAIN)
+  const apply = (p: Project) => {
+    const c = findChannel(p, channelId)
+    if (c) c.volume = value
+  }
+  if (!writeAutomation(channelId, 'volume', value, apply)) update('Change volume', apply, `volume:${channelId}`)
 }
 
 export function setPan(channelId: Id, pan: number) {
-  update(
-    'Change pan',
-    (p) => {
-      const c = findChannel(p, channelId)
-      if (c) c.pan = clamp(pan, -1, 1)
-    },
-    `pan:${channelId}`,
-  )
+  const value = clamp(pan, -1, 1)
+  const apply = (p: Project) => {
+    const c = findChannel(p, channelId)
+    if (c) c.pan = value
+  }
+  if (!writeAutomation(channelId, 'pan', value, apply)) update('Change pan', apply, `pan:${channelId}`)
 }
 
 export function toggleMute(channelId: Id) {
@@ -144,7 +146,9 @@ export function toggleSolo(trackId: Id) {
 }
 
 export function setMasterVolume(volume: number) {
-  update('Change master volume', (p) => void (p.master.volume = clamp(volume, 0, MAX_GAIN)), 'volume:master')
+  const value = clamp(volume, 0, MAX_GAIN)
+  const apply = (p: Project) => void (p.master.volume = value)
+  if (!writeAutomation('master', 'volume', value, apply)) update('Change master volume', apply, 'volume:master')
 }
 
 export function toggleMasterMute() {
@@ -461,6 +465,90 @@ export function setClipSourceBpm(clipId: Id, sourceBpm: number | null) {
   })
 }
 
+/** Finds an audio clip by id, for edits that only apply to audio. */
+function findAudioClip(p: Project, clipId: Id): AudioClip | undefined {
+  for (const t of p.tracks) {
+    const clip = t.clips.find((c) => c.id === clipId)
+    if (clip && !isMidiClip(clip)) return clip
+  }
+  return undefined
+}
+
+/** Plays audio clips backwards (or forwards again). */
+export function setClipsReversed(clipIds: Id[], reversed: boolean) {
+  update(reversed ? 'Reverse clip' : 'Unreverse clip', (p) => {
+    for (const id of clipIds) {
+      const clip = findAudioClip(p, id)
+      if (!clip) continue
+      if (reversed) clip.reversed = true
+      else delete clip.reversed
+    }
+  })
+}
+
+/** Shifts audio clips' pitch, in semitones, without changing their length (0 removes it). */
+export function setClipsPitch(clipIds: Id[], semitones: number) {
+  const value = Math.round(clamp(semitones, -MAX_PITCH_SHIFT, MAX_PITCH_SHIFT) * 100) / 100
+  update('Change clip pitch', (p) => {
+    for (const id of clipIds) {
+      const clip = findAudioClip(p, id)
+      if (!clip) continue
+      if (value) clip.pitch = value
+      else delete clip.pitch
+    }
+  })
+}
+
+/**
+ * Replaces clips with one audio clip of their rendered sound (consolidate, convert to audio).
+ * `removeFrom` are the clips to take out; the new clip goes on `trackId`, or on a new audio
+ * track inserted below `below` (with `name`), whose id is returned.
+ */
+export function placeRendered(
+  asset: AssetMeta,
+  start: number,
+  removeFrom: Id[],
+  target: { trackId: Id } | { below: Id; name: string; muteSource?: boolean },
+  label: string,
+): Id {
+  const ids = new Set(removeFrom)
+  const clip = createClip({ name: asset.name, assetId: asset.id, start, duration: asset.duration })
+  const newTrack = 'below' in target ? createTrack(target.name) : null
+  if (newTrack) newTrack.clips.push(clip)
+  update(label, (p) => {
+    p.assets[asset.id] = asset
+    for (const t of p.tracks) t.clips = t.clips.filter((c) => !ids.has(c.id))
+    if (newTrack && 'below' in target) {
+      const index = p.tracks.findIndex((t) => t.id === target.below)
+      p.tracks.splice(index + 1, 0, newTrack)
+      const source = p.tracks[index]
+      if (target.muteSource && source) source.muted = true
+    } else if ('trackId' in target) {
+      findTrack(p, target.trackId)?.clips.push(clip)
+    }
+  })
+  return newTrack?.id ?? ('trackId' in target ? target.trackId : '')
+}
+
+/**
+ * Applies pitch-editor moves: the clip plays `edited` (the original with the moves rendered in)
+ * and remembers the original and the moves. With no moves it goes back to the original.
+ */
+export function applyPitchEdits(clipId: Id, sourceAssetId: Id, edits: PitchEdit[], edited: AssetMeta | null) {
+  update(edits.length ? 'Edit pitch' : 'Reset pitch edits', (p) => {
+    const clip = findAudioClip(p, clipId)
+    if (!clip) return
+    if (edited && edits.length) {
+      p.assets[edited.id] = edited
+      clip.assetId = edited.id
+      clip.pitchSource = { assetId: sourceAssetId, edits }
+    } else {
+      clip.assetId = sourceAssetId
+      delete clip.pitchSource
+    }
+  })
+}
+
 export function renameClip(clipId: Id, name: string) {
   const trimmed = name.trim()
   if (!trimmed) return
@@ -498,7 +586,7 @@ function findPad(p: Project, trackId: Id, note: number): DrumPad | undefined {
 }
 
 /** Changes a pad's tune, decay or gain; a slider drag is one undo step (end it with endGesture). */
-export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad, 'tune' | 'decay' | 'gain' | 'name'>>) {
+export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad, 'tune' | 'decay' | 'gain' | 'name' | 'choke'>>) {
   const key = Object.keys(changes).join(',')
   update(
     'Change pad',
@@ -508,6 +596,7 @@ export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad,
       if (changes.tune !== undefined) pad.tune = clamp(changes.tune, -12, 12)
       if (changes.decay !== undefined) pad.decay = clamp(changes.decay, 0.25, 4)
       if (changes.gain !== undefined) pad.gain = clamp(changes.gain, 0, 2)
+      if (changes.choke !== undefined) pad.choke = Math.round(clamp(changes.choke, 0, 4))
       if (changes.name?.trim()) pad.name = changes.name.trim()
       const kit = findTrack(p, trackId)!.kit!
       kit.preset = 'custom'
@@ -640,8 +729,8 @@ export function removeEffect(ref: ChannelRef, effectId: Id) {
   update('Remove effect', (p) => {
     const holder = chainHolder(p, ref)
     if (holder) holder.effects = holder.effects.filter((e) => e.id !== effectId)
-    const track = ref === 'master' ? undefined : findTrack(p, ref)
-    if (track) pruneLanes(track)
+    const lanes = automationHolder(p, ref)
+    if (lanes) pruneLanes(lanes)
   })
 }
 
@@ -672,15 +761,13 @@ export function toggleChainBypass(ref: ChannelRef) {
 
 /** Sets one parameter; a knob drag is one undo step (call endGesture when it ends). */
 export function setEffectParam(ref: ChannelRef, effectId: Id, key: string, value: number | string | boolean) {
-  update(
-    'Change effect',
-    (p) => {
-      const effect = chainHolder(p, ref)?.effects.find((e) => e.id === effectId)
-      const def = effect && findParam(effect.type, key)
-      if (effect && def) effect.params[key] = normalizeParam(def, value)
-    },
-    `fx:${effectId}:${key}`,
-  )
+  const apply = (p: Project) => {
+    const effect = chainHolder(p, ref)?.effects.find((e) => e.id === effectId)
+    const def = effect && findParam(effect.type, key)
+    if (effect && def) effect.params[key] = normalizeParam(def, value)
+  }
+  if (typeof value === 'number' && writeAutomation(ref, effectTarget(effectId, key), value, apply)) return
+  update('Change effect', apply, `fx:${effectId}:${key}`)
 }
 
 export interface ChainTemplate {
@@ -695,43 +782,48 @@ export function applyChain(ref: ChannelRef, chain: ChainTemplate[], label: strin
   update(label, (p) => {
     const holder = chainHolder(p, ref)
     if (holder) holder.effects = effects
-    const track = ref === 'master' ? undefined : findTrack(p, ref)
-    if (track) pruneLanes(track)
+    const lanes = automationHolder(p, ref)
+    if (lanes) pruneLanes(lanes)
   })
 }
 
 // --- Automation ----------------------------------------------------------------------------
 
-function laneOf(p: Project, trackId: Id, target: AutomationTarget): AutomationLane | undefined {
-  return findTrack(p, trackId)?.automation.find((l) => l.target === target)
+function laneOf(p: Project, channel: ChannelRef, target: AutomationTarget): AutomationLane | undefined {
+  return automationHolder(p, channel)?.automation.find((l) => l.target === target)
+}
+
+/** A track, bus or the master: whatever holds the lanes. */
+function automationHolder(p: Project, ref: ChannelRef): AutomatedChannel | undefined {
+  return ref === 'master' ? p.master : findChannel(p, ref)
 }
 
 /** Drops lanes whose target no longer exists (e.g. after removing an effect). */
-function pruneLanes(track: Track) {
-  track.automation = track.automation.filter((l) => resolveTarget(track, l.target) !== null)
+function pruneLanes(holder: AutomatedChannel) {
+  holder.automation = holder.automation.filter((l) => resolveTarget(holder, l.target) !== null)
 }
 
-/** Creates an empty lane for a target if the track doesn't have one yet. */
-export function addAutomationLane(trackId: Id, target: AutomationTarget) {
+/** Creates an empty lane for a target if the channel doesn't have one yet. */
+export function addAutomationLane(channel: ChannelRef, target: AutomationTarget) {
   update('Add automation', (p) => {
-    const t = findTrack(p, trackId)
+    const t = automationHolder(p, channel)
     if (!t || t.automation.some((l) => l.target === target) || !resolveTarget(t, target)) return
     t.automation.push({ target, points: [] })
   })
 }
 
-export function removeAutomationLane(trackId: Id, target: AutomationTarget) {
+export function removeAutomationLane(channel: ChannelRef, target: AutomationTarget) {
   update('Remove automation', (p) => {
-    const t = findTrack(p, trackId)
+    const t = automationHolder(p, channel)
     if (t) t.automation = t.automation.filter((l) => l.target !== target)
   })
 }
 
 /** Adds a point (creating the lane if needed). Returns the point's index in the lane. */
-export function addAutomationPoint(trackId: Id, target: AutomationTarget, point: AutomationPoint): number {
+export function addAutomationPoint(channel: ChannelRef, target: AutomationTarget, point: AutomationPoint): number {
   let index = -1
   update('Add automation point', (p) => {
-    const t = findTrack(p, trackId)
+    const t = automationHolder(p, channel)
     if (!t || !resolveTarget(t, target)) return
     let lane = t.automation.find((l) => l.target === target)
     if (!lane) {
@@ -749,11 +841,11 @@ export function addAutomationPoint(trackId: Id, target: AutomationTarget, point:
  * Moves a point during a drag (one undo step per drag; call endGesture at the end). It can't
  * pass its neighbours, so its index stays the same.
  */
-export function moveAutomationPoint(trackId: Id, target: AutomationTarget, index: number, time: number, value: number) {
+export function moveAutomationPoint(channel: ChannelRef, target: AutomationTarget, index: number, time: number, value: number) {
   update(
     'Move automation point',
     (p) => {
-      const lane = laneOf(p, trackId, target)
+      const lane = laneOf(p, channel, target)
       const point = lane?.points[index]
       if (!lane || !point) return
       const min = index > 0 ? lane.points[index - 1].time + 0.001 : 0
@@ -761,25 +853,25 @@ export function moveAutomationPoint(trackId: Id, target: AutomationTarget, index
       point.time = Math.min(max, Math.max(min, time))
       point.value = Math.min(1, Math.max(0, value))
     },
-    `auto-point:${trackId}:${target}:${index}`,
+    `auto-point:${channel}:${target}:${index}`,
   )
 }
 
 /** Sets the bend of the segment that starts at `index`. */
-export function setAutomationCurve(trackId: Id, target: AutomationTarget, index: number, curve: number) {
+export function setAutomationCurve(channel: ChannelRef, target: AutomationTarget, index: number, curve: number) {
   update(
     'Bend automation',
     (p) => {
-      const point = laneOf(p, trackId, target)?.points[index]
+      const point = laneOf(p, channel, target)?.points[index]
       if (point) point.curve = Math.min(1, Math.max(-1, curve))
     },
-    `auto-curve:${trackId}:${target}:${index}`,
+    `auto-curve:${channel}:${target}:${index}`,
   )
 }
 
-export function deleteAutomationPoint(trackId: Id, target: AutomationTarget, index: number) {
+export function deleteAutomationPoint(channel: ChannelRef, target: AutomationTarget, index: number) {
   update('Delete automation point', (p) => {
-    const lane = laneOf(p, trackId, target)
+    const lane = laneOf(p, channel, target)
     if (lane) lane.points.splice(index, 1)
   })
 }

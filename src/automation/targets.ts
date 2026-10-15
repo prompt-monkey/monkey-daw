@@ -2,7 +2,7 @@
 
 import { EFFECTS, automatableParams, findParam, formatValue, fromNormalized, toNormalized, type NumberParam } from '../effects/definitions'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
-import type { AutomationTarget, Id, Track } from '../model/types'
+import type { AutomatedChannel, AutomationTarget, Id } from '../model/types'
 
 export type ParsedTarget = { kind: 'volume' } | { kind: 'pan' } | { kind: 'effect'; effectId: Id; param: string }
 
@@ -29,8 +29,11 @@ export interface ResolvedTarget {
 
 const formatPan = (pan: number) => (Math.abs(pan) < 0.005 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`)
 
-/** Resolves a lane's target on a track; null if it no longer exists (e.g. the effect was removed). */
-export function resolveTarget(track: Track, target: AutomationTarget): ResolvedTarget | null {
+/**
+ * Resolves a lane's target on a track, bus or the master; null if it doesn't exist there (the
+ * effect was removed, or pan on the master).
+ */
+export function resolveTarget(track: AutomatedChannel, target: AutomationTarget): ResolvedTarget | null {
   const parsed = parseTarget(target)
   if (!parsed) return null
   if (parsed.kind === 'volume') {
@@ -44,13 +47,15 @@ export function resolveTarget(track: Track, target: AutomationTarget): ResolvedT
     }
   }
   if (parsed.kind === 'pan') {
+    if (track.pan === undefined) return null
+    const pan = track.pan
     return {
       target,
       label: 'Pan',
       toReal: (v) => v * 2 - 1,
       fromReal: (pan) => (pan + 1) / 2,
       format: (v) => formatPan(v * 2 - 1),
-      manual: track.pan,
+      manual: pan,
     }
   }
   const effect = track.effects.find((e) => e.id === parsed.effectId)
@@ -68,12 +73,10 @@ export function resolveTarget(track: Track, target: AutomationTarget): ResolvedT
   }
 }
 
-/** Every target a track can automate, in display order. */
-export function availableTargets(track: Track): { target: AutomationTarget; label: string }[] {
-  const out = [
-    { target: 'volume', label: 'Volume' },
-    { target: 'pan', label: 'Pan' },
-  ]
+/** Every target a track, bus or the master can automate, in display order. */
+export function availableTargets(track: AutomatedChannel): { target: AutomationTarget; label: string }[] {
+  const out = [{ target: 'volume', label: 'Volume' }]
+  if (track.pan !== undefined) out.push({ target: 'pan', label: 'Pan' })
   for (const effect of track.effects) {
     for (const def of automatableParams(effect.type)) {
       const resolved = resolveTarget(track, effectTarget(effect.id, def.key))

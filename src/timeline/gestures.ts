@@ -91,6 +91,14 @@ function track(
   window.addEventListener('keydown', key, true)
 }
 
+/** Pixels of vertical drag for a full bend of a fade curve. */
+const CURVE_DRAG = 60
+
+/** A fade's new curve after dragging `dy` pixels (up bends it toward a fast fade). */
+function fadeCurve(key: 'fadeInCurve' | 'fadeOutCurve', curve = 0, dy: number): Partial<Clip> {
+  return { [key]: Math.max(-1, Math.min(1, Math.round((curve - dy / CURVE_DRAG) * 20) / 20)) }
+}
+
 const LABELS: Record<ClipHandle, string> = {
   body: 'Move clip',
   'trim-start': 'Trim clip',
@@ -116,8 +124,11 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
   const own = group.find((g) => g.clip.id === clip.id)
   if (!own) return
   // MIDI clips can be extended freely; audio clips end where their audio ends.
-  const assetDuration = isMidiClip(clip) ? Infinity : (project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration)
-  const rate = clipRate(clip, project.bpm)
+  const trim = {
+    rate: clipRate(clip, project.bpm),
+    reversed: !isMidiClip(clip) && clip.reversed === true,
+    assetDuration: isMidiClip(clip) ? Infinity : (project.assets[clip.assetId]?.duration ?? clip.offset + clip.duration),
+  }
   const startTrack = trackIndexAt(ctx, e.clientY)
   const x0 = e.clientX
   const y0 = e.clientY
@@ -134,16 +145,17 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
           preview = moveClips(group, clip, dt, trackIndexAt(ctx, ev.clientY) - startTrack, trackIds, snap, trackKinds)
           break
         case 'trim-start':
-          preview = only(trimStart(clip, snap(clip.start + dt), rate))
+          preview = only(trimStart(clip, snap(clip.start + dt), trim))
           break
         case 'trim-end':
-          preview = only(trimEnd(clip, assetDuration, snap(clip.start + clip.duration + dt), rate))
+          preview = only(trimEnd(clip, snap(clip.start + clip.duration + dt), trim))
           break
+        // Sideways sets the fade's length; up and down bend its curve.
         case 'fade-in':
-          preview = only(setFadeIn(clip, clip.fadeIn + dt))
+          preview = only({ ...setFadeIn(clip, clip.fadeIn + dt), ...fadeCurve('fadeInCurve', clip.fadeInCurve, ev.clientY - y0) })
           break
         case 'fade-out':
-          preview = only(setFadeOut(clip, clip.fadeOut - dt))
+          preview = only({ ...setFadeOut(clip, clip.fadeOut - dt), ...fadeCurve('fadeOutCurve', clip.fadeOutCurve, ev.clientY - y0) })
           break
         case 'gain':
           preview = only(setGain(clip.gain - ((ev.clientY - y0) * MAX_CLIP_GAIN) / Math.max(20, ctx.rowHeight - 20)))

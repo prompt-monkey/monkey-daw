@@ -143,6 +143,25 @@ function PadSettings({ track, pad }: { track: Track; pad: DrumPad }) {
         (v) => setPad(track.id, pad.note, { gain: v }),
         1,
       )}
+      <label
+        className="grid grid-cols-[2.6rem_1fr] items-center gap-1.5 text-[10px] text-text-dim"
+        title="Pads in the same choke group cut each other off, like a closed hi-hat stopping an open one"
+      >
+        Choke
+        <select
+          value={pad.choke}
+          onChange={(e) => setPad(track.id, pad.note, { choke: Number(e.target.value) })}
+          className={selectClass}
+          aria-label={`${pad.name} choke group`}
+        >
+          <option value={0}>None</option>
+          {[1, 2, 3, 4].map((g) => (
+            <option key={g} value={g}>
+              Group {g}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   )
 }

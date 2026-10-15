@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { downloadBlob, exportFilename } from '../audio/export'
+import { downloadBlob, exportFilename } from '../audio/download'
 import type { LyricSection, LyricSectionKind } from '../model/types'
 import { addLyricSection, moveLyricSection, removeLyricSection, setLyricKind, setLyricText } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'

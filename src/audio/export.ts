@@ -11,6 +11,9 @@ import { loopIsActive } from './schedule'
 import type { EncodeRequest } from './encode.worker'
 import type { Mp3Bitrate } from './mp3'
 import { peakOf, type BitDepth } from './wav'
+import { exportFilename, safeName } from './download'
+
+export { downloadBlob, exportFilename } from './download'
 
 export type ExportScope = 'project' | 'loop'
 export type ExportFormat = 'wav' | 'mp3'
@@ -90,21 +93,7 @@ export function suggestedTail(project: Project): number {
   return Math.min(MAX_TAIL, Math.ceil(longest))
 }
 
-/** A filesystem-safe file name from the project name, e.g. "Song (loop).mp3" or "Song stems.zip". */
-export function exportFilename(projectName: string, scope: ExportScope, extension = 'wav', suffix = ''): string {
-  return `${safeName(projectName, 'mix')}${suffix}${scope === 'loop' ? ' (loop)' : ''}.${extension}`
-}
 
-function safeName(name: string, fallback: string): string {
-  return (
-    name
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\w\- ]+/g, '')
-      .trim()
-      .replace(/\s+/g, ' ') || fallback
-  )
-}
 
 /** Tracks that get a stem: every track that isn't muted and has clips (solo is ignored). */
 export function stemTracks(project: Project): Track[] {
@@ -201,16 +190,4 @@ export async function exportMix(
     duration,
     files: tracks.length,
   }
-}
-
-/** Saves a blob through the browser's download flow. */
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

@@ -1,10 +1,14 @@
-import { EffectsRack } from '../effects/EffectsRack'
-import { PianoRoll } from '../pianoroll/PianoRoll'
-import { PitchEditor } from '../pitch/PitchEditor'
+import { Suspense, lazy } from 'react'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore, type BottomPanelView } from '../state/viewStore'
 import { useShellStore } from '../ui/shell'
+import { Loading } from '../ui/Loading'
 import { Mixer } from './Mixer'
+
+// The editors load the first time they open, so the app starts faster.
+const EffectsRack = lazy(() => import('../effects/EffectsRack').then((m) => ({ default: m.EffectsRack })))
+const PianoRoll = lazy(() => import('../pianoroll/PianoRoll').then((m) => ({ default: m.PianoRoll })))
+const PitchEditor = lazy(() => import('../pitch/PitchEditor').then((m) => ({ default: m.PitchEditor })))
 
 /** The panel under the timeline: the mixer, an effect rack, the piano roll or the pitch editor. */
 export function BottomPanel() {
@@ -46,7 +50,9 @@ export function BottomPanel() {
         {pianoClipId && tab('pianoRoll', `${openTrack?.kind === 'drums' ? 'Drums' : 'Piano roll'}${clipName ? ` · ${clipName}` : ''}`)}
         {pitchClipId && tab('pitch', `Pitch${pitchClipName ? ` · ${pitchClipName}` : ''}`)}
       </div>
-      {panel === 'mixer' ? <Mixer /> : panel === 'effects' ? <EffectsRack /> : panel === 'pitch' ? <PitchEditor /> : <PianoRoll />}
+      <Suspense fallback={<Loading />}>
+        {panel === 'mixer' ? <Mixer /> : panel === 'effects' ? <EffectsRack /> : panel === 'pitch' ? <PitchEditor /> : <PianoRoll />}
+      </Suspense>
     </section>
   )
 }

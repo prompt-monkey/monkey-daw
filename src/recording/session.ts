@@ -2,7 +2,7 @@
 // armed track, lined up with where recording started.
 
 import { engine } from '../audio/engine'
-import { downloadBlob } from '../audio/export'
+import { downloadBlob } from '../audio/download'
 import { secondsPerBar } from '../model/grid'
 import type { Id } from '../model/types'
 import { addAudioClip, addTrack } from '../state/actions'

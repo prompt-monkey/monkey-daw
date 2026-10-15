@@ -32,7 +32,8 @@ in total) and was checked in Chrome.
 | 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `36f01b8` |
 | 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | `889bfee` |
 | 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | `d726e7b` |
-| 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | |
+| 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | `3b9b8b9` |
+| 11 | Faster first load: editors and dialogs load on first use, libraries in their own chunks | Done | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
@@ -430,6 +431,15 @@ A static app with no backend.
 | MIDI import | Our own small Standard MIDI File reader (notes only) | No dependency needed for reading notes; each track/channel becomes a part |
 | Testing | Vitest (model, scheduler, DSP, storage with fake-indexeddb); browser checks in Chrome | The audio engine needs real-browser checks; automated Playwright tests are still to add |
 | Hosting | Any static host (GitHub Pages, Netlify, Cloudflare Pages); optional PWA for offline use | No server needed |
+
+Loading (step 11): the page starts with the app core (about 130 kB) plus React and Dexie in
+chunks of their own (cached across app updates). The piano roll and drum editor, the effects rack
+screen, the pitch editor, export, the projects dialog, lyrics, the shortcuts guide and the
+recording settings load on first use, and the zip library loads with export or project files.
+Once the app has started and the browser is idle, the editors and dialogs are fetched in the
+background, so opening one doesn't wait. In total the page starts with about 550 kB of script
+instead of 665 kB. The effects' audio code stays in the core: a project needs it as soon as it
+plays.
 
 Decisions:
 - React over Svelte/Solid: the safer pick for a large UI.

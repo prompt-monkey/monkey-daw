@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { RecordingSettingsDialog } from './RecordingSettingsDialog'
+import { lazy, Suspense, useState } from 'react'
 import { recordingSupported } from './recorder'
 import { toggleRecording } from './session'
 import { useRecordingStore } from './store'
+
+const RecordingSettingsDialog = lazy(() => import('./RecordingSettingsDialog').then((m) => ({ default: m.RecordingSettingsDialog })))
 
 /** Record button, metronome toggle and recording settings, for the transport bar. */
 export function RecordControls() {
@@ -38,7 +39,11 @@ export function RecordControls() {
       <button className={button} onClick={() => setSettingsOpen(true)} title="Recording settings" aria-label="Recording settings" disabled={!supported}>
         ⚙
       </button>
-      {settingsOpen && <RecordingSettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <RecordingSettingsDialog onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { barBeatAt, formatTime } from '../model/grid'
 import type { SnapMode, SyncMode } from '../model/types'
 import { setLoop, setSnap, setSyncMode, setTimeSignature } from '../state/actions'
@@ -8,12 +8,14 @@ import { useViewStore } from '../state/viewStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { RecordControls } from '../recording/RecordControls'
 import { saveCurrent, useIsDirty, useSessionStore } from '../storage/session'
-import { ExportDialog } from './ExportDialog'
-import { ProjectsDialog } from './ProjectsDialog'
 import { Menu } from './Menu'
 import { NumberField } from './NumberField'
 import { TempoControl } from './TempoControl'
 import { setLitePreference, toggleFullscreen, useShellStore, type LitePreference } from './shell'
+
+// Dialogs load the first time they open, so the app starts faster.
+const ExportDialog = lazy(() => import('./ExportDialog').then((m) => ({ default: m.ExportDialog })))
+const ProjectsDialog = lazy(() => import('./ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })))
 
 const SIGNATURES = ['4/4', '3/4', '2/4', '6/8']
 
@@ -64,7 +66,11 @@ function ProjectControls({ menu }: { menu?: React.ReactNode }) {
       <button className={button} onClick={() => void saveCurrent()} disabled={saving} title="Save (Ctrl+S)">
         {saving ? 'Saving…' : 'Save'}
       </button>
-      {projectsOpen && <ProjectsDialog onClose={() => setProjectsOpen(false)} />}
+      {projectsOpen && (
+        <Suspense fallback={null}>
+          <ProjectsDialog onClose={() => setProjectsOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -140,7 +146,11 @@ export function TransportBar() {
       ) : (
         <ProjectControls />
       )}
-      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      {exportOpen && (
+        <Suspense fallback={null}>
+          <ExportDialog onClose={() => setExportOpen(false)} />
+        </Suspense>
+      )}
       <TimeReadout small={narrow} />
       <button
         className={`rounded-md px-4 py-1.5 text-sm font-semibold ${playing ? 'bg-warn text-accent-ink' : 'bg-accent text-accent-ink'}`}

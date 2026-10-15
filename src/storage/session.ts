@@ -3,7 +3,7 @@
 // project store, the audio engine and IndexedDB in step.
 
 import { create } from 'zustand'
-import { downloadBlob, exportFilename } from '../audio/export'
+import { downloadBlob, exportFilename } from '../audio/download'
 import { engine } from '../audio/engine'
 import { createId, createProject } from '../model/factory'
 import type { Id, Project } from '../model/types'
@@ -12,7 +12,6 @@ import { stop } from '../state/transport'
 import { useViewStore } from '../state/viewStore'
 import { toast } from '../ui/toast'
 import { getDatabase } from './db'
-import { PROJECT_FILE_EXTENSION, buildProjectFile, readProjectFile } from './projectFile'
 import {
   collectGarbage,
   deleteProject,
@@ -149,6 +148,7 @@ export async function renameSaved(id: Id, name: string, renameOpenProject: (name
 export async function downloadProjectFile(): Promise<void> {
   const project = useProjectStore.getState().project
   try {
+    const { PROJECT_FILE_EXTENSION, buildProjectFile } = await import('./projectFile')
     const blob = await buildProjectFile(project, audioSource)
     downloadBlob(blob, exportFilename(project.name, 'project').replace(/\.wav$/, PROJECT_FILE_EXTENSION))
   } catch (err) {
@@ -159,6 +159,7 @@ export async function downloadProjectFile(): Promise<void> {
 /** Opens a .mdaw file and saves it as a project in this browser. */
 export async function importProjectFile(file: File): Promise<void> {
   try {
+    const { readProjectFile } = await import('./projectFile')
     const { project, audio } = await readProjectFile(file)
     // Never overwrite a different saved project that happens to share the id.
     const clash = useSessionStore.getState().projects.some((p) => p.id === project.id)

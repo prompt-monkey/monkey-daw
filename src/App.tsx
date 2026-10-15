@@ -1,13 +1,16 @@
+import { Suspense, lazy } from 'react'
 import { LibraryPanel } from './library/LibraryPanel'
-import { LyricsPanel } from './lyrics/LyricsPanel'
 import { BottomPanel } from './mixer/BottomPanel'
 import { useViewStore } from './state/viewStore'
 import { Timeline } from './timeline/Timeline'
 import { useShellStore } from './ui/shell'
-import { ShortcutsDialog } from './ui/ShortcutsDialog'
 import { Toaster } from './ui/Toaster'
 import { TransportBar } from './ui/TransportBar'
 import { useShortcuts } from './ui/useShortcuts'
+
+// Loaded the first time they open, so the app starts faster.
+const LyricsPanel = lazy(() => import('./lyrics/LyricsPanel').then((m) => ({ default: m.LyricsPanel })))
+const ShortcutsDialog = lazy(() => import('./ui/ShortcutsDialog').then((m) => ({ default: m.ShortcutsDialog })))
 
 /** On phones, side panels slide over the timeline instead of taking its room. */
 function Drawer({ side, onClose, children }: { side: 'left' | 'right'; onClose: () => void; children: React.ReactNode }) {
@@ -42,17 +45,24 @@ export default function App() {
           <Timeline />
           {mixerOpen && <BottomPanel />}
         </div>
-        {lyricsOpen &&
-          (narrow ? (
-            <Drawer side="right" onClose={() => view.setLyricsOpen(false)}>
+        {lyricsOpen && (
+          <Suspense fallback={null}>
+            {narrow ? (
+              <Drawer side="right" onClose={() => view.setLyricsOpen(false)}>
+                <LyricsPanel />
+              </Drawer>
+            ) : (
               <LyricsPanel />
-            </Drawer>
-          ) : (
-            <LyricsPanel />
-          ))}
+            )}
+          </Suspense>
+        )}
       </div>
       <Toaster />
-      {shortcutsOpen && <ShortcutsDialog onClose={() => view.setShortcutsOpen(false)} />}
+      {shortcutsOpen && (
+        <Suspense fallback={null}>
+          <ShortcutsDialog onClose={() => view.setShortcutsOpen(false)} />
+        </Suspense>
+      )}
       {!narrow && (
         <footer className="flex gap-3 border-t border-line px-4 py-1.5 text-[11px] text-text-dim">
           <span>

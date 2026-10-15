@@ -31,6 +31,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
       ['Shift + drag a clip’s right edge', 'Stretch its audio to fit, keeping the pitch'],
       ['Alt + click a fade handle', 'A fade of one grid step (again: none)'],
       ['Right-click a clip', 'Clip options (split, replace audio, tempo sync, rename…)'],
+      ['Touch: tap a clip', 'Duplicate, swap sample or delete it'],
       ['Double-click a MIDI or drum clip', 'Edit its notes'],
     ],
   },
@@ -52,6 +53,9 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
     items: [
       ['D · B · S · E · Z', 'Draw, brush, select, erase, zoom tools'],
       ['Shift + drag (draw tool)', 'Paint a note on every step'],
+      ['Touch: zoom tool', 'One finger moves around without placing notes'],
+      ['Touch: pinch', 'Sideways zooms time, up and down zooms the rows'],
+      ['Touch: double tap a note', 'Delete it'],
       ['Right-click', 'Erase notes'],
       ['↑ / ↓ · Shift+↑ / ↓', 'Semitone · octave'],
       ['← / →', 'Move by one grid step'],
@@ -66,6 +70,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
       ['Shift + click', 'Accented hit'],
       ['Alt + click a hit', 'Change its velocity'],
       ['Drop a sample on a pad', 'Use it on that pad'],
+      ['▾ on a row · drop on a row name', 'Change that row’s sound'],
     ],
   },
   {

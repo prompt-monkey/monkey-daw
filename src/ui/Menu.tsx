@@ -92,6 +92,7 @@ export function Menu({ items, label, className = '', children }: Props) {
         ref={button}
         className={className}
         onClick={toggle}
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={anchor !== null}
         title={label}

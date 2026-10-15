@@ -14,7 +14,9 @@ import { useProjectStore } from '../state/projectStore'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { toast } from '../ui/toast'
 import { GeneratorDialog } from './GeneratorDialog'
-import { KIT_PRESETS } from './kits'
+import { DRUM_VOICES, KIT_PRESETS, VOICE_LABELS } from './kits'
+import { useViewStore } from '../state/viewStore'
+import { Menu } from '../ui/Menu'
 
 const ROW_H = 20
 const HEADER_W = 92
@@ -77,6 +79,87 @@ function PadGrid({ track, selected, onSelect }: { track: Track; selected: number
           <span className="truncate text-[9px] text-text-dim">{pad.sample ? (assets[pad.sample.assetId]?.name ?? 'Sample') : 'Synth'}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A step-sequencer row's name: click to select and hear it; the ▾ menu (or dropping a one-shot on
+ * it) changes the row's sound without leaving the sequencer.
+ */
+function RowHeader({ track, pad, selected, onSelect }: { track: Track; pad: DrumPad; selected: boolean; onSelect: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [dropping, setDropping] = useState(false)
+  const load = async (get: () => Promise<AssetMeta>) => {
+    try {
+      setPadSample(track.id, pad.note, await get())
+    } catch {
+      toast('Could not read that file. Use a WAV or MP3 file.', 'error')
+    }
+  }
+  return (
+    <div
+      className={`sticky left-0 z-10 flex shrink-0 items-center border-r border-b border-line text-[10px] ${
+        selected ? 'bg-accent/15 text-text' : 'bg-surface text-text-dim hover:text-text'
+      } ${dropping ? 'ring-2 ring-accent ring-inset' : ''}`}
+      style={{ width: HEADER_W }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(SAMPLE_DRAG_TYPE) && !e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setDropping(true)
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDropping(false)
+        onSelect()
+        const sampleId = e.dataTransfer.getData(SAMPLE_DRAG_TYPE)
+        const file = e.dataTransfer.files[0]
+        if (sampleId) void load(() => assetForSample(sampleId))
+        else if (file) void load(() => engine.assets.importFile(file, engine.context))
+      }}
+    >
+      <button
+        className="h-full min-w-0 flex-1 truncate px-1.5 text-left"
+        onPointerDown={() => {
+          onSelect()
+          playPad(track.id, pad)
+        }}
+        title={`${pad.name}: click to hear it · drop a one-shot here to change its sound`}
+      >
+        {pad.name}
+      </button>
+      <Menu
+        label={`${pad.name} sound`}
+        className="h-full shrink-0 px-1 text-text-dim hover:text-text"
+        items={[
+          { label: 'Choose from the library…', onSelect: () => useViewStore.getState().setLibraryPick({ kind: 'pad', trackId: track.id, note: pad.note }) },
+          { label: 'Load a file…', onSelect: () => fileRef.current?.click() },
+          ...(pad.sample ? [{ label: 'Back to the synth sound', onSelect: () => setPadSample(track.id, pad.note, null) }] : []),
+          ...DRUM_VOICES.map((voice) => ({
+            label: `${!pad.sample && voice === pad.voice ? '✓ ' : ''}Synth: ${VOICE_LABELS[voice]}`,
+            onSelect: () => {
+              if (pad.sample) setPadSample(track.id, pad.note, null)
+              setPad(track.id, pad.note, { voice })
+              useProjectStore.getState().endGesture()
+            },
+          })),
+        ]}
+      >
+        ▾
+      </Menu>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".wav,.mp3,audio/wav,audio/mpeg"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) void load(() => engine.assets.importFile(file, engine.context))
+        }}
+      />
     </div>
   )
 }
@@ -384,18 +467,7 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
           <div className="relative" style={{ width: HEADER_W + columns * stepSize.width }} onContextMenu={(e) => e.preventDefault()}>
             {kit.pads.map((p) => (
               <div key={p.note} className="flex" style={{ height: ROW_H }}>
-                <button
-                  className={`sticky left-0 z-10 shrink-0 truncate border-r border-b border-line px-1.5 text-left text-[10px] ${
-                    p.note === pad.note ? 'bg-accent/15 text-text' : 'bg-surface text-text-dim hover:text-text'
-                  }`}
-                  style={{ width: HEADER_W }}
-                  onPointerDown={() => {
-                    setSelectedPad(p.note)
-                    playPad(track.id, p)
-                  }}
-                >
-                  {p.name}
-                </button>
+                <RowHeader track={track} pad={p} selected={p.note === pad.note} onSelect={() => setSelectedPad(p.note)} />
                 <div className="flex touch-none" onPointerDown={onCellDown} title="Click or drag to add steps · Shift accent · Alt+click changes velocity · right-click removes">
                   {Array.from({ length: columns }, (_, col) => {
                     const v = cells.get(`${p.note}:${col}`)

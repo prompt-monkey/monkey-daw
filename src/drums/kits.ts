@@ -28,6 +28,9 @@ export const PADS: PadTemplate[] = [
 
 export const DRUM_VOICES: DrumVoice[] = [...new Set(PADS.map((p) => p.voice))]
 
+/** A name for each synthesized drum sound (its pad's name). */
+export const VOICE_LABELS = Object.fromEntries(PADS.map((p) => [p.voice, p.name])) as Record<DrumVoice, string>
+
 /** Pad notes by name, for patterns and presets. */
 export const NOTE = {
   kick: 36,

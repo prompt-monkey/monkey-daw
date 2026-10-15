@@ -1,4 +1,5 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
+import { Dialog } from '../ui/Dialog'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
 import type { Track } from '../model/types'
 import { LevelMeter } from '../mixer/LevelMeter'
@@ -52,6 +53,8 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
   const narrow = useShellStore((s) => s.narrow)
   const headerWidth = useHeaderWidth()
   const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
+  // Phones: volume, pan, solo, mute and delete in a panel of their own.
+  const [mixOpen, setMixOpen] = useState(false)
 
   const slider = (
     label: string,
@@ -198,6 +201,21 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           >
             S
           </button>
+          {narrow && track.kind === 'audio' && (
+            <button
+              onClick={() => useViewStore.getState().setLibraryPick({ kind: 'append', trackId: track.id })}
+              className={small}
+              aria-label={`Add a sample at the end of ${track.name}`}
+              title="Add a sample from the library at the end of this track"
+            >
+              +
+            </button>
+          )}
+          {narrow && (
+            <button onClick={() => setMixOpen(true)} className={small} aria-label={`${track.name} mix`} title="Volume, pan, solo, mute">
+              Mix
+            </button>
+          )}
           <Menu
             label="Track options"
             className={small}
@@ -252,6 +270,57 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           )}
         {laneRow}
       </div>
+      {mixOpen && (
+        <Dialog title={`Mix · ${track.name}`} onClose={() => setMixOpen(false)}>
+          <div className="flex flex-col gap-3">
+            {slider(
+              'VOL',
+              autoVolume ?? gainToFader(track.volume),
+              0,
+              1,
+              (v) => setVolume(track.id, faderToGain(v)),
+              formatDb(autoVolume === null ? track.volume : faderToGain(autoVolume)),
+              gainToFader(1),
+              autoVolume !== null,
+            )}
+            {slider(
+              'PAN',
+              autoPan === null ? track.pan : autoPan * 2 - 1,
+              -1,
+              1,
+              (v) => setPan(track.id, v),
+              formatPan(autoPan === null ? track.pan : autoPan * 2 - 1),
+              0,
+              autoPan !== null,
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => toggleMute(track.id)}
+                className={`flex-1 rounded-md border border-line py-2 text-sm ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
+                aria-pressed={track.muted}
+              >
+                Mute
+              </button>
+              <button
+                onClick={() => toggleSolo(track.id)}
+                className={`flex-1 rounded-md border border-line py-2 text-sm ${track.solo ? 'bg-accent text-accent-ink' : ''}`}
+                aria-pressed={track.solo}
+              >
+                Solo
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setMixOpen(false)
+                removeTrack(track.id)
+              }}
+              className="rounded-md border border-danger/60 py-2 text-sm text-danger"
+            >
+              Delete track
+            </button>
+          </div>
+        </Dialog>
+      )}
       {/* While armed, the meter shows the input level so you can set it before recording. */}
       <LevelMeter
         channelId={track.id}

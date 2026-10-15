@@ -1,32 +1,15 @@
 import { useState } from 'react'
 import { MAX_PITCH_SHIFT, MAX_SOURCE_BPM, MIN_SOURCE_BPM, detectBpm } from '../model/tempo'
 import { isMidiClip, type Clip, type Id } from '../model/types'
-import { engine } from '../audio/engine'
-import { deleteClips, duplicateClips, renameClip, replaceClipAudio, setClipSourceBpm, setClipsPitch, setClipsReversed, splitClips } from '../state/actions'
+import { deleteClips, duplicateClips, renameClip, setClipSourceBpm, setClipsPitch, setClipsReversed, splitClips } from '../state/actions'
 import { playheadPosition } from '../state/transport'
 import { toast } from '../ui/toast'
+import { pickAudio, replaceWith } from './replaceAudio'
 import { consolidate, convertToAudio } from './bounce'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
 import { ContextMenu, type MenuItem } from '../ui/Menu'
 import { PromptDialog } from '../ui/PromptDialog'
-
-/** Opens the file picker for one WAV or MP3. */
-function pickAudio(onFile: (file: File) => void) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'audio/*,.wav,.mp3'
-  input.onchange = () => input.files?.[0] && onFile(input.files[0])
-  input.click()
-}
-
-async function replaceWith(clipId: Id, file: File) {
-  try {
-    replaceClipAudio(clipId, await engine.assets.importFile(file, engine.context))
-  } catch {
-    toast(`Could not open ${file.name}`, 'error')
-  }
-}
 
 export interface ClipMenuState {
   clip: Clip

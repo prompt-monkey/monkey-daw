@@ -50,6 +50,8 @@ interface ViewStore {
   rackChannel: Id | 'master'
   /** Per track, the automation lane drawn over its clips (absent: clips view). */
   automationView: Record<Id, string>
+  libraryPick: LibraryPick | null
+  clipBubble: ClipBubble | null
   setPps: (pps: number) => void
   setTrackHeight: (h: TrackHeight) => void
   setFollowPlayhead: (on: boolean) => void
@@ -75,6 +77,22 @@ interface ViewStore {
   openRack: (channel: Id | 'master') => void
   /** Shows a lane over a track's clips, or the clips again with null. */
   setAutomationView: (trackId: Id, target: string | null) => void
+  /** Opens the library to choose a sample for `pick` (null cancels). */
+  setLibraryPick: (pick: LibraryPick | null) => void
+  setClipBubble: (bubble: ClipBubble | null) => void
+}
+
+/**
+ * The library is open to choose a sample for something: to add at the end of a track (the
+ * track's + button), to swap a clip's audio (the clip bubble) or for a drum pad (a drum row's menu).
+ */
+export type LibraryPick = { kind: 'append'; trackId: Id } | { kind: 'replace'; clipId: Id } | { kind: 'pad'; trackId: Id; note: number }
+
+/** The floating menu shown after tapping a clip on a touch screen, at screen coordinates. */
+export interface ClipBubble {
+  clipId: Id
+  x: number
+  y: number
 }
 
 export type BottomPanelView = 'mixer' | 'effects' | 'pianoRoll' | 'pitch'
@@ -100,6 +118,8 @@ export const useViewStore = create<ViewStore>()((set) => ({
   patternMode: true,
   rackChannel: 'master',
   automationView: {},
+  libraryPick: null,
+  clipBubble: null,
   setPps: (pps) => set({ pps: clampPps(pps) }),
   setTrackHeight: (trackHeight) => set({ trackHeight }),
   setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -112,7 +132,7 @@ export const useViewStore = create<ViewStore>()((set) => ({
   setTrackDrop: (trackDrop) => set({ trackDrop }),
   setMixerOpen: (mixerOpen) => set({ mixerOpen }),
   setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
-  setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
+  setLibraryOpen: (libraryOpen) => set(libraryOpen ? { libraryOpen } : { libraryOpen, libraryPick: null }),
   setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   setAutomationWrite: (automationWrite) => set({ automationWrite }),
@@ -128,4 +148,6 @@ export const useViewStore = create<ViewStore>()((set) => ({
       else delete next[trackId]
       return { automationView: next }
     }),
+  setLibraryPick: (libraryPick) => set(libraryPick ? { libraryPick, libraryOpen: true, clipBubble: null } : { libraryPick }),
+  setClipBubble: (clipBubble) => set({ clipBubble }),
 }))

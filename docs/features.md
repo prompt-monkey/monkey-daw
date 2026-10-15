@@ -6,8 +6,8 @@ unlimited, and projects and samples stay on the user's device. One fixed dark th
 ## Progress
 
 Every planned feature is built, including the optional graphic pitch editor, and a second pass filled the
-remaining gaps (step 8). Every step has unit tests (297 in
-total) and was checked in Chrome.
+remaining gaps (steps 8 and 9). Every step has unit tests (301
+in total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
@@ -30,7 +30,8 @@ total) and was checked in Chrome.
 | 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | `b229b4f` |
 | 6 | Effects batch 3: auto-tune | Done | `642b1fd` |
 | 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `36f01b8` |
-| 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | |
+| 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | `889bfee` |
+| 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
@@ -38,8 +39,8 @@ Known gaps in what's built (planned for later steps):
 - Sample browser: no bundled starter pack; no MIDI melodies section yet (.mid files import from
   the timeline's Import button or by dropping them on the timeline)
 - Recording: tested with a synthetic signal; real microphones and latency setups need a hands-on check
-- Phones: the layout was checked at 390 px wide in desktop Chrome; touch gestures (pinch zoom, tap
-  to seek, touch drags) need a check on a real phone. Long-press menus depend on the browser
+- Phones: the layout and touch gestures were checked at 390 px wide in desktop Chrome with emulated
+  touch (taps, drags, two-finger pinch); they still need a check on a real phone. Long-press menus depend on the browser
   (Chrome on Android opens them; iOS Safari doesn't)
 - Drums: swing comes only from the generator's genres; generated patterns are written for 16 steps
   per bar, so other time signatures use the first steps of each pattern
@@ -145,6 +146,12 @@ PAT loops the open clip on its own while the piano roll is shown; SONG plays the
 The brush (B, or Shift+drag with the draw tool) paints one note on every step the pointer crosses,
 at the pointer's pitch and the last note length.
 
+On touch screens (step 9): the zoom tool is the magnifier: one finger moves around the grid
+without placing notes, a tap zooms in. Two fingers pinch to zoom: spread sideways for time, up and
+down for the height of the key rows. With the select tool a tap marks or unmarks a note. A double
+tap on a note deletes it. On phones each selected note gets a ↔ handle at its end to stretch it,
+and a floating bar offers Copy, Duplicate, Delete and (after copying) Paste.
+
 ## 7. Drums
 - Pad view: drop a one-shot to assign it
 - Step sequencer
@@ -169,11 +176,18 @@ ringing, with a 6 ms fade. The closed and open hi-hats are in group 1 in every k
 sample libraries, matched by category and name (kick, 808, snare, clap, rim, closed and open hat,
 crash, ride, tom, cowbell, shaker, conga, perc); press again for another. It's one undo step.
 
+Each step-sequencer row (step 9) has a ▾ menu to change its sound without leaving the sequencer:
+choose a one-shot from the library, load a file, or pick any of the synthesized sounds. Dropping a
+one-shot on the row's name works too.
+
 ## 8. Mixer
 - Channel strips
 - Buses with post-fader sends
 - Master channel and fader
 - VU meter and input meter
+
+Faders (step 9) also move with the mouse wheel and the arrow keys: 2% of their travel per notch or
+press, 0.5% with Shift. Double-click resets to 0 dB.
 
 ## 9. Effects rack
 The rack and batch 1 were built in phase 3, batches 2 and 3 in phase 6, batch 4 in step 8.
@@ -374,6 +388,13 @@ clips, notes, steps, pads, knobs and automation edit instead of scrolling.
 
 On phones the top bar keeps Save, undo/redo, the time, the transport and tempo / time signature /
 snap / loop, and puts Projects, Library, Lyrics, Mixer, Export and the view options in a ☰ menu.
+
+Phone timeline (step 9): tap a clip for a floating menu with Duplicate, Swap sample (MIDI and drum
+clips: Edit) and Delete; a tap anywhere else closes it. Each track header has Mix (volume, pan,
+mute, solo and delete in a panel) and, on audio tracks, + to add a sample at the end of the track.
+The + button and Swap sample open the library to pick a sample: tap one to hear it, then "Use this
+sample" (with no library imported, Swap sample asks for a file instead). Dropping or picking a
+sample whose name gives another time signature (6/8 into a 4/4 project…) shows a warning.
 
 ## Tech stack
 

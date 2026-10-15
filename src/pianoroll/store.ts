@@ -19,6 +19,9 @@ export const GRID_STEPS = [
 
 export const MIN_PPB = 12
 export const MAX_PPB = 480
+/** Height of one key row in pixels (vertical zoom). */
+export const MIN_KEY_H = 8
+export const MAX_KEY_H = 32
 
 interface PianoRollStore {
   tool: PianoRollTool
@@ -26,6 +29,8 @@ interface PianoRollStore {
   grid: number
   /** Zoom, in pixels per beat. */
   ppb: number
+  /** Vertical zoom: pixels per key row. */
+  keyH: number
   selection: Id[]
   clipboard: Note[]
   /** Length of new notes: the last length drawn or resized, in beats. */
@@ -35,6 +40,7 @@ interface PianoRollStore {
   setTool: (tool: PianoRollTool) => void
   setGrid: (grid: number) => void
   setPpb: (ppb: number) => void
+  setKeyH: (keyH: number) => void
   setSelection: (ids: Id[]) => void
   setClipboard: (notes: Note[]) => void
   setLastLength: (beats: number) => void
@@ -45,6 +51,7 @@ export const usePianoRollStore = create<PianoRollStore>()((set) => ({
   tool: 'draw',
   grid: 1 / 4,
   ppb: 64,
+  keyH: 14,
   selection: [],
   clipboard: [],
   lastLength: 1 / 2,
@@ -52,6 +59,7 @@ export const usePianoRollStore = create<PianoRollStore>()((set) => ({
   setTool: (tool) => set({ tool }),
   setGrid: (grid) => set({ grid }),
   setPpb: (ppb) => set({ ppb: Math.min(MAX_PPB, Math.max(MIN_PPB, ppb)) }),
+  setKeyH: (keyH) => set({ keyH: Math.min(MAX_KEY_H, Math.max(MIN_KEY_H, keyH)) }),
   setSelection: (selection) => set({ selection }),
   setClipboard: (clipboard) => set({ clipboard }),
   setLastLength: (lastLength) => set({ lastLength }),

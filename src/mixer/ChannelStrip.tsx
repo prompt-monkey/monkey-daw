@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { faderToGain, formatDb, gainToFader } from '../model/levels'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { EFFECTS } from '../effects/definitions'
@@ -38,6 +38,10 @@ const useLocked = (automated: boolean) => {
   return automated && !write
 }
 
+/** Fader travel per wheel notch or arrow key press, and with Shift. */
+const FADER_STEP = 0.02
+const FADER_FINE = 0.005
+
 function Fader({
   label,
   gain,
@@ -51,8 +55,40 @@ function Fader({
 }) {
   const endGesture = useProjectStore((s) => s.endGesture)
   const locked = useLocked(automated)
+  const ref = useRef<HTMLInputElement>(null)
+  // The latest values for the wheel listener, which is attached once.
+  const latest = useRef({ gain, onChange, locked })
+  useEffect(() => {
+    latest.current = { gain, onChange, locked }
+  })
+  /** Moves the fader by `steps` (a step is 2% of its travel; 0.5% with Shift). */
+  const nudge = (steps: number, fine: boolean) => {
+    const { gain: g, onChange: set, locked: l } = latest.current
+    if (l) return
+    const pos = Math.min(1, Math.max(0, gainToFader(g) + steps * (fine ? FADER_FINE : FADER_STEP)))
+    // Remembered at once, so quick notches add up before the next render.
+    latest.current.gain = faderToGain(pos)
+    set(latest.current.gain)
+  }
+  // Wheel: up raises it. A native listener, so the page doesn't scroll at the same time.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let timer: number | undefined
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      nudge(e.deltaY < 0 ? 1 : -1, e.shiftKey)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => useProjectStore.getState().endGesture(), 400)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+    // nudge reads the latest values through a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return (
     <input
+      ref={ref}
       type="range"
       min={0}
       max={1}
@@ -60,11 +96,16 @@ function Fader({
       value={gainToFader(gain)}
       disabled={locked}
       onChange={(e) => onChange(faderToGain(Number(e.target.value)))}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        nudge(e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1, e.shiftKey)
+      }}
       onPointerUp={endGesture}
       onKeyUp={endGesture}
       onDoubleClick={() => !locked && onChange(1)}
       aria-label={`${label} volume`}
-      title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Double-click for 0 dB'}
+      title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Drag, wheel or ↑/↓ (Shift: fine) · double-click for 0 dB'}
       className={`h-full w-6 ${locked ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
     />

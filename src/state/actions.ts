@@ -632,7 +632,7 @@ function findPad(p: Project, trackId: Id, note: number): DrumPad | undefined {
 }
 
 /** Changes a pad's tune, decay or gain; a slider drag is one undo step (end it with endGesture). */
-export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad, 'tune' | 'decay' | 'gain' | 'name' | 'choke'>>) {
+export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad, 'tune' | 'decay' | 'gain' | 'name' | 'choke' | 'voice'>>) {
   const key = Object.keys(changes).join(',')
   update(
     'Change pad',
@@ -643,6 +643,7 @@ export function setPad(trackId: Id, note: number, changes: Partial<Pick<DrumPad,
       if (changes.decay !== undefined) pad.decay = clamp(changes.decay, 0.25, 4)
       if (changes.gain !== undefined) pad.gain = clamp(changes.gain, 0, 2)
       if (changes.choke !== undefined) pad.choke = Math.round(clamp(changes.choke, 0, 4))
+      if (changes.voice !== undefined) pad.voice = changes.voice
       if (changes.name?.trim()) pad.name = changes.name.trim()
       const kit = findTrack(p, trackId)!.kit!
       kit.preset = 'custom'

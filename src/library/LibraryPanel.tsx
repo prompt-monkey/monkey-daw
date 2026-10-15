@@ -2,7 +2,9 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { computePeaks } from '../audio/peaks'
 import { useTransportStore } from '../state/transport'
 import { Menu } from '../ui/Menu'
-import { decodeSample, placeSample, previewSample, SAMPLE_DRAG_TYPE, stopPreview } from './audio'
+import { applyPickedSample, decodeSample, placeSample, previewSample, SAMPLE_DRAG_TYPE, stopPreview } from './audio'
+import { useViewStore } from '../state/viewStore'
+import { useProjectStore } from '../state/projectStore'
 import { buildTree, filterSamples, isFiltering, skipWrapperFolders, type FolderNode } from './browse'
 import { CATEGORY_LABELS, SIGNATURES, categoryColor, detectKind, type SampleCategory } from './classify'
 import { fromDataTransfer, fromFileList } from './incoming'
@@ -19,7 +21,9 @@ const chip = (active: boolean) =>
 
 const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
 
-const addAtPlayhead = (id: string) => void placeSample(id, useTransportStore.getState().cursor)
+/** Adds the sample at the playhead, or uses it for what the library was opened to pick. */
+const addAtPlayhead = (id: string) =>
+  void (useViewStore.getState().libraryPick ? applyPickedSample(id) : placeSample(id, useTransportStore.getState().cursor))
 
 const SampleRow = memo(function SampleRow({ sample, depth, hint }: { sample: SampleInfo; depth: number; hint?: string }) {
   const selected = useLibraryStore((s) => s.selectedId === sample.id)
@@ -152,7 +156,31 @@ function LibraryItem({ id, name, samples }: { id: string; name: string; samples:
   )
 }
 
+/** While the library is open to pick a sample: what it is for, and a way out. */
+function PickBanner() {
+  const pick = useViewStore((s) => s.libraryPick)
+  const target = useProjectStore((s) => {
+    if (!pick) return null
+    if (pick.kind === 'append') return s.project.tracks.find((t) => t.id === pick.trackId)?.name ?? null
+    if (pick.kind === 'pad') return s.project.tracks.find((t) => t.id === pick.trackId)?.kit?.pads.find((p) => p.note === pick.note)?.name ?? null
+    for (const t of s.project.tracks) for (const c of t.clips) if (c.id === pick.clipId) return c.name
+    return null
+  })
+  if (!pick) return null
+  return (
+    <div className="flex items-center gap-2 border-b border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px]">
+      <span className="min-w-0 flex-1">
+        {pick.kind === 'append' ? `Add to the end of “${target}”` : pick.kind === 'pad' ? `A sound for the ${target} pad` : `Swap the audio of “${target}”`}: tap a sample to hear it, then “Use this sample”.
+      </span>
+      <button className="rounded border border-line px-1.5 py-0.5 hover:bg-surface-2" onClick={() => useViewStore.getState().setLibraryPick(null)}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 function PreviewPane() {
+  const pick = useViewStore((s) => s.libraryPick)
   const selectedId = useLibraryStore((s) => s.selectedId)
   const sample = useLibraryStore((s) => s.samples.find((x) => x.id === s.selectedId))
   const playing = useLibraryStore((s) => s.previewingId !== null && s.previewingId === s.selectedId)
@@ -188,6 +216,7 @@ function PreviewPane() {
   }, [selectedId])
 
   if (!sample) return null
+  const picking = pick !== null
   const kind = detectKind(sample.path, sample.duration)
   const tags = [
     CATEGORY_LABELS[sample.category],
@@ -211,8 +240,11 @@ function PreviewPane() {
         >
           {playing ? '■ Stop' : '▶ Preview'}
         </button>
-        <button className="rounded-md border border-line px-2.5 py-1 text-xs hover:bg-surface-2" onClick={() => addAtPlayhead(sample.id)}>
-          Add at playhead
+        <button
+          className={`rounded-md border px-2.5 py-1 text-xs hover:bg-surface-2 ${picking ? 'border-accent text-accent' : 'border-line'}`}
+          onClick={() => addAtPlayhead(sample.id)}
+        >
+          {picking ? 'Use this sample' : 'Add at playhead'}
         </button>
       </div>
     </section>
@@ -271,6 +303,7 @@ export function LibraryPanel() {
         void fromDataTransfer(e.dataTransfer.items).then(importLists)
       }}
     >
+      <PickBanner />
       <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
         <h2 className="flex-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
           Library <span className="font-normal normal-case">· {samples.length} samples</span>

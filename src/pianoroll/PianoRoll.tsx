@@ -28,32 +28,34 @@ import { useViewStore } from '../state/viewStore'
 import { trackColor } from '../timeline/colors'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import { toast } from '../ui/toast'
+import { useShellStore } from '../ui/shell'
 import { DrumEditor } from '../drums/DrumEditor'
 import { ClipNameInput, PlaybackModeToggle } from './shared'
 import { btnClass, segClass } from './styles'
 import { GRID_STEPS, usePianoRollStore, type PianoRollTool } from './store'
 
-const KEY_H = 14
 const KEYS_W = 64
 const RULER_H = 20
-const GRID_H = (MAX_PITCH + 1) * KEY_H
 const DRAG_THRESHOLD = 3
 
-const yOf = (pitch: number) => (MAX_PITCH - pitch) * KEY_H
-const pitchAtY = (y: number) => clampPitch(MAX_PITCH - Math.floor(y / KEY_H))
+// Key rows are `keyH` pixels tall (the vertical zoom, from the store).
+const gridHeight = (keyH: number) => (MAX_PITCH + 1) * keyH
+const yOf = (pitch: number, keyH: number) => (MAX_PITCH - pitch) * keyH
+const pitchAtY = (y: number, keyH: number) => clampPitch(MAX_PITCH - Math.floor(y / keyH))
 
 const TOOLS: { id: PianoRollTool; label: string; key: string; title: string }[] = [
   { id: 'draw', label: 'Draw', key: 'd', title: 'Draw notes: click to add, drag to set the length; Shift+drag paints (D)' },
   { id: 'brush', label: 'Brush', key: 'b', title: 'Brush: drag to paint a note on every step, at the last note length (B)' },
   { id: 'select', label: 'Select', key: 's', title: 'Select notes: drag a box, Shift adds (S)' },
   { id: 'erase', label: 'Erase', key: 'e', title: 'Erase notes: click or drag over them (E). Right-click erases with any tool' },
-  { id: 'zoom', label: 'Zoom', key: 'z', title: 'Zoom: click to zoom in, Alt+click to zoom out (Z)' },
+  { id: 'zoom', label: 'Zoom', key: 'z', title: 'Move and zoom: drag to move around without placing notes, click to zoom in, Alt+click to zoom out (Z)' },
 ]
 
 /** Window-level drag tracking, so a drag keeps working outside the grid. Escape cancels. */
 function drag(start: PointerEvent, onMove: (ev: PointerEvent, moved: boolean) => void, onEnd: (ev: PointerEvent | null, moved: boolean) => void) {
   let moved = false
   const move = (ev: PointerEvent) => {
+    if (ev.pointerId !== start.pointerId) return
     if (!moved && Math.abs(ev.clientX - start.clientX) < DRAG_THRESHOLD && Math.abs(ev.clientY - start.clientY) < DRAG_THRESHOLD) return
     moved = true
     onMove(ev, true)
@@ -62,11 +64,18 @@ function drag(start: PointerEvent, onMove: (ev: PointerEvent, moved: boolean) =>
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', up)
     window.removeEventListener('pointercancel', cancel)
+    window.removeEventListener('pointerdown', other, true)
     window.removeEventListener('keydown', key, true)
     onEnd(ev, moved)
   }
-  const up = (ev: PointerEvent) => finish(ev)
+  const up = (ev: PointerEvent) => {
+    if (ev.pointerId === start.pointerId) finish(ev)
+  }
   const cancel = () => finish(null)
+  // A second finger turns the gesture into a pinch: whatever the first finger started is dropped.
+  const other = (ev: PointerEvent) => {
+    if (ev.pointerId !== start.pointerId) finish(null)
+  }
   const key = (ev: KeyboardEvent) => {
     if (ev.key !== 'Escape') return
     ev.stopPropagation()
@@ -75,6 +84,7 @@ function drag(start: PointerEvent, onMove: (ev: PointerEvent, moved: boolean) =>
   window.addEventListener('pointermove', move)
   window.addEventListener('pointerup', up)
   window.addEventListener('pointercancel', cancel)
+  window.addEventListener('pointerdown', other, true)
   window.addEventListener('keydown', key, true)
 }
 
@@ -84,11 +94,12 @@ const audition = (trackId: string, pitch: number) => void engine.auditionNote(tr
 const Keyboard = memo(function Keyboard({ trackId }: { trackId: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pressed, setPressed] = useState<number | null>(null)
+  const keyH = usePianoRollStore((s) => s.keyH)
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !ref.current) return
     e.preventDefault()
-    const pitchAt = (clientY: number) => pitchAtY(clientY - ref.current!.getBoundingClientRect().top)
+    const pitchAt = (clientY: number) => pitchAtY(clientY - ref.current!.getBoundingClientRect().top, keyH)
     let current = pitchAt(e.clientY)
     setPressed(current)
     audition(trackId, current)
@@ -113,7 +124,7 @@ const Keyboard = memo(function Keyboard({ trackId }: { trackId: string }) {
       ref={ref}
       onPointerDown={onPointerDown}
       className="sticky left-0 z-20 shrink-0 cursor-pointer touch-none border-r border-line select-none"
-      style={{ width: KEYS_W, height: GRID_H }}
+      style={{ width: KEYS_W, height: gridHeight(keyH) }}
       title="Click a key to hear it; drag across the keys for a glissando"
     >
       {Array.from({ length: MAX_PITCH + 1 }, (_, i) => {
@@ -125,7 +136,7 @@ const Keyboard = memo(function Keyboard({ trackId }: { trackId: string }) {
             className={`flex items-center justify-end border-b pr-1 text-[9px] leading-none ${
               pitch === pressed ? 'bg-accent text-accent-ink' : black ? 'bg-[#16181d] text-text-dim' : 'bg-[#d9dce3] text-[#30343c]'
             } ${pitch % 12 === 0 ? 'border-black/50' : 'border-black/15'}`}
-            style={{ height: KEY_H }}
+            style={{ height: keyH }}
           >
             {pitch % 12 === 0 ? noteName(pitch) : ''}
           </div>
@@ -137,6 +148,7 @@ const Keyboard = memo(function Keyboard({ trackId }: { trackId: string }) {
 
 /** Horizontal key rows behind the notes: darker for black keys, a line under each C. */
 const Rows = memo(function Rows() {
+  const keyH = usePianoRollStore((s) => s.keyH)
   return (
     <div className="pointer-events-none absolute inset-0">
       {Array.from({ length: MAX_PITCH + 1 }, (_, i) => {
@@ -145,7 +157,7 @@ const Rows = memo(function Rows() {
           <div
             key={pitch}
             className={`border-b ${isBlackKey(pitch) ? 'bg-black/25' : ''} ${pitch % 12 === 0 ? 'border-white/15' : 'border-white/[0.04]'}`}
-            style={{ height: KEY_H }}
+            style={{ height: keyH }}
           />
         )
       })}
@@ -368,7 +380,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
 function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: string }) {
   const bpm = useProjectStore((s) => s.project.bpm)
   const ts = useProjectStore((s) => s.project.timeSignature)
-  const { tool, grid, ppb, selection } = usePianoRollStore()
+  const { tool, grid, ppb, keyH, selection } = usePianoRollStore()
   const [draft, setDraft] = useState<Note[] | null>(null)
   const [marquee, setMarquee] = useState<Marquee | null>(null)
   const [viewportWidth, setViewportWidth] = useState(0)
@@ -376,6 +388,8 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   const gridRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
   const zoomAnchor = useRef<{ beat: number; px: number } | null>(null)
+  const lastTap = useRef<{ id: string; at: number } | null>(null)
+  const narrow = useShellStore((s) => s.narrow)
 
   const notes = draft ?? clip.notes
   const spb = beatSeconds(bpm)
@@ -395,7 +409,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     if (!el) return
     const pitches = clip.notes.map((n) => n.pitch)
     const center = pitches.length ? (Math.min(...pitches) + Math.max(...pitches)) / 2 : 60
-    el.scrollTop = Math.max(0, yOf(center) - (el.clientHeight - RULER_H) / 2)
+    el.scrollTop = Math.max(0, yOf(center, store().keyH) - (el.clientHeight - RULER_H) / 2)
     el.scrollLeft = Math.max(0, range.from * store().ppb - 24)
     store().setSelection([])
     // Only when another clip opens.
@@ -417,9 +431,34 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
       store().setPpb(current * Math.exp(-e.deltaY * 0.0015))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
+    // Two fingers pinch: spreading sideways zooms time, spreading up and down zooms the key rows.
+    let pinch: { dx: number; dy: number; ppb: number; keyH: number } | null = null
+    const span = (t: TouchList) => ({ dx: Math.abs(t[0].clientX - t[1].clientX), dy: Math.abs(t[0].clientY - t[1].clientY) })
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) pinch = { ...span(e.touches), ppb: store().ppb, keyH: store().keyH }
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return
+      e.preventDefault()
+      const now = span(e.touches)
+      // Only the direction the fingers are spread in zooms (a spread of under 40 px is ignored).
+      if (pinch.dx > 40) store().setPpb(pinch.ppb * (now.dx / pinch.dx))
+      if (pinch.dy > 40) store().setKeyH(pinch.keyH * (now.dy / pinch.dy))
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null
+    }
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchEnd)
     return () => {
       observer.disconnect()
       el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
     }
   }, [store])
 
@@ -440,7 +479,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   })
 
   const beatAt = (clientX: number) => (clientX - gridRef.current!.getBoundingClientRect().left) / ppb
-  const pitchAt = (clientY: number) => pitchAtY(clientY - gridRef.current!.getBoundingClientRect().top)
+  const pitchAt = (clientY: number) => pitchAtY(clientY - gridRef.current!.getBoundingClientRect().top, keyH)
 
   const zoomAt = (clientX: number, factor: number) => {
     const el = scrollerRef.current!
@@ -495,6 +534,24 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     )
   }
 
+  /** The zoom tool: drag to move around the grid without placing notes; a click zooms in (Alt: out). */
+  const panGesture = (e: React.PointerEvent) => {
+    const el = scrollerRef.current!
+    const left0 = el.scrollLeft
+    const top0 = el.scrollTop
+    const altKey = e.altKey
+    drag(
+      e.nativeEvent,
+      (ev) => {
+        el.scrollLeft = left0 - (ev.clientX - e.clientX)
+        el.scrollTop = top0 - (ev.clientY - e.clientY)
+      },
+      (ev, moved) => {
+        if (ev && !moved) zoomAt(e.clientX, altKey ? 1 / 1.5 : 1.5)
+      },
+    )
+  }
+
   /** Paints a note on every step the pointer crosses, at the pointer's pitch and the last length. */
   const brushGesture = (e: React.PointerEvent) => {
     const step = Math.max(grid, snapBeat(store().lastLength, grid))
@@ -524,7 +581,19 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   const noteGesture = (e: React.PointerEvent, noteId: string, edge: boolean) => {
     const grabbed = clip.notes.find((n) => n.id === noteId)
     if (!grabbed) return
-    const additive = e.shiftKey || e.ctrlKey || e.metaKey
+    if (e.pointerType === 'touch' && !edge) {
+      const now = performance.now()
+      const last = lastTap.current
+      lastTap.current = { id: noteId, at: now }
+      if (last && last.id === noteId && now - last.at < 350) {
+        lastTap.current = null
+        commit('Delete note', clip.notes.filter((n) => n.id !== noteId))
+        store().setSelection(store().selection.filter((id) => id !== noteId))
+        return
+      }
+    }
+    // On a touch screen the select tool marks and unmarks notes with a tap.
+    const additive = !edge && (e.shiftKey || e.ctrlKey || e.metaKey || (tool === 'select' && e.pointerType === 'touch'))
     if (additive) {
       const sel = store().selection
       store().setSelection(sel.includes(noteId) ? sel.filter((id) => id !== noteId) : [...sel, noteId])
@@ -611,53 +680,78 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
     scrollerRef.current?.focus({ preventScroll: true })
     const noteEl = (e.target as HTMLElement).closest<HTMLElement>('[data-note-id]')
     if (e.button === 2 || tool === 'erase') return eraseGesture(e)
-    if (tool === 'zoom') return zoomAt(e.clientX, e.altKey ? 1 / 1.5 : 1.5)
+    if (tool === 'zoom') return panGesture(e)
     if (noteEl) return noteGesture(e, noteEl.dataset.noteId!, Boolean((e.target as HTMLElement).closest('[data-edge]')))
     if (tool === 'brush' || (tool === 'draw' && e.shiftKey)) return brushGesture(e)
     if (tool === 'draw') return drawGesture(e)
     marqueeGesture(e)
   }
 
+  /** The selected notes and the rest. */
+  const split = () => {
+    const ids = new Set(store().selection)
+    return { selected: clip.notes.filter((n) => ids.has(n.id)), others: clip.notes.filter((n) => !ids.has(n.id)) }
+  }
+  const deleteSelected = () => {
+    const { selected, others } = split()
+    if (!selected.length) return
+    commit(selected.length > 1 ? 'Delete notes' : 'Delete note', others)
+    store().setSelection([])
+  }
+  const copySelected = (cut = false) => {
+    const { selected, others } = split()
+    if (!selected.length) return
+    store().setClipboard(selected)
+    if (cut) {
+      commit('Cut notes', others)
+      store().setSelection([])
+    }
+  }
+  const paste = () => {
+    const { clipboard } = store()
+    if (!clipboard.length) return
+    // At the playhead when it's over this clip, else where the notes were copied from.
+    const beat = (playheadPosition() - origin) / spb
+    const at = beat >= range.from && beat < range.to ? Math.floor(beat / grid + 1e-9) * grid : Math.min(...clipboard.map((n) => n.start))
+    const pasted = placeNotes(clipboard, at)
+    commit('Paste notes', [...clip.notes, ...pasted])
+    store().setSelection(pasted.map((n) => n.id))
+  }
+  /** Copies the selected notes right after themselves. */
+  const duplicateSelected = () => {
+    const { selected } = split()
+    if (!selected.length) return
+    const first = Math.min(...selected.map((n) => n.start))
+    const span = Math.ceil((notesEnd(selected) - first) / grid - 1e-9) * grid
+    const copies = placeNotes(selected, first + span)
+    commit('Duplicate notes', [...clip.notes, ...copies])
+    store().setSelection(copies.map((n) => n.id))
+  }
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey
     const key = e.key.toLowerCase()
     const { selection: sel, clipboard } = store()
-    const ids = new Set(sel)
-    const selected = clip.notes.filter((n) => ids.has(n.id))
-    const others = clip.notes.filter((n) => !ids.has(n.id))
+    const { selected, others } = split()
     const handled = () => {
       e.preventDefault()
       e.stopPropagation()
     }
     if ((key === 'delete' || key === 'backspace') && selected.length) {
       handled()
-      commit(selected.length > 1 ? 'Delete notes' : 'Delete note', others)
-      store().setSelection([])
+      deleteSelected()
     } else if (mod && key === 'a') {
       handled()
       store().setSelection(clip.notes.map((n) => n.id))
     } else if (mod && (key === 'c' || key === 'x') && selected.length) {
       handled()
-      store().setClipboard(selected)
-      if (key === 'x') {
-        commit('Cut notes', others)
-        store().setSelection([])
-      }
+      copySelected(key === 'x')
     } else if (mod && key === 'v' && clipboard.length) {
       handled()
-      // At the playhead when it's over this clip, else where the notes were copied from.
-      const beat = (playheadPosition() - origin) / spb
-      const at = beat >= range.from && beat < range.to ? Math.floor(beat / grid + 1e-9) * grid : Math.min(...clipboard.map((n) => n.start))
-      const pasted = placeNotes(clipboard, at)
-      commit('Paste notes', [...clip.notes, ...pasted])
-      store().setSelection(pasted.map((n) => n.id))
+      paste()
     } else if (mod && key === 'd' && selected.length) {
       handled()
-      const first = Math.min(...selected.map((n) => n.start))
-      const span = Math.ceil((notesEnd(selected) - first) / grid - 1e-9) * grid
-      const copies = placeNotes(selected, first + span)
-      commit('Duplicate notes', [...clip.notes, ...copies])
-      store().setSelection(copies.map((n) => n.id))
+      duplicateSelected()
     } else if ((key === 'arrowup' || key === 'arrowdown') && selected.length && !mod) {
       handled()
       const moved = transposeNotes(selected, (key === 'arrowup' ? 1 : -1) * (e.shiftKey ? 12 : 1))
@@ -679,11 +773,35 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   const cursor = tool === 'zoom' ? 'cursor-zoom-in' : tool === 'erase' ? 'cursor-crosshair' : tool === 'draw' || tool === 'brush' ? 'cursor-cell' : 'cursor-default'
   const bars = Math.ceil(beatsShown / barBeats)
 
+  const hasClipboard = usePianoRollStore((s) => s.clipboard.length > 0)
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {narrow && (selection.length > 0 || hasClipboard) && (
+        <div className="absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1 rounded-lg border border-line bg-surface p-1 shadow-2xl" role="toolbar" aria-label="Note actions">
+          {selection.length > 0 && (
+            <>
+              <button className={btnClass} onClick={() => copySelected()}>
+                Copy
+              </button>
+              <button className={btnClass} onClick={duplicateSelected}>
+                Duplicate
+              </button>
+              <button className={`${btnClass} text-danger`} onClick={deleteSelected}>
+                Delete
+              </button>
+            </>
+          )}
+          {hasClipboard && (
+            <button className={btnClass} onClick={paste}>
+              Paste
+            </button>
+          )}
+        </div>
+      )}
       <Toolbar track={track} clip={clip} notes={notes} />
       <div ref={scrollerRef} tabIndex={0} onKeyDown={onKeyDown} className="relative min-h-0 flex-1 overflow-auto outline-none" aria-label="Piano roll">
-        <div className="relative" style={{ width: KEYS_W + gridWidth, height: RULER_H + GRID_H }}>
+        <div className="relative" style={{ width: KEYS_W + gridWidth, height: RULER_H + gridHeight(keyH) }}>
           {/* Ruler: bars of the clip; click to move the playhead. */}
           <div className="sticky top-0 z-30 flex" style={{ height: RULER_H }}>
             <div className="sticky left-0 z-10 shrink-0 border-r border-b border-line bg-surface" style={{ width: KEYS_W }} />
@@ -711,7 +829,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
             <div
               ref={gridRef}
               className={`relative shrink-0 touch-none select-none ${cursor}`}
-              style={{ width: gridWidth, height: GRID_H, ...gridLines(ppb, barBeats, beatBeats, grid) }}
+              style={{ width: gridWidth, height: gridHeight(keyH), ...gridLines(ppb, barBeats, beatBeats, grid) }}
               onPointerDown={onGridPointerDown}
               onContextMenu={(e) => e.preventDefault()}
             >
@@ -734,9 +852,9 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
                     }`}
                     style={{
                       left: n.start * ppb,
-                      top: yOf(n.pitch) + 1,
+                      top: yOf(n.pitch, keyH) + 1,
                       width,
-                      height: KEY_H - 1,
+                      height: keyH - 1,
                       opacity: outside ? 0.35 : 1,
                       background: `color-mix(in oklch, ${color} ${Math.round(45 + 55 * n.velocity)}%, ${selected ? 'white' : 'black'} ${selected ? 25 : 10}%)`,
                     }}
@@ -747,6 +865,23 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
                   </div>
                 )
               })}
+              {/* Phones: a handle you can hit with a finger, at the end of each selected note. */}
+              {narrow &&
+                notes
+                  .filter((n) => selection.includes(n.id))
+                  .map((n) => (
+                    <div
+                      key={`edge-${n.id}`}
+                      data-note-id={n.id}
+                      className="absolute z-[5] flex items-center justify-center"
+                      style={{ left: (n.start + n.length) * ppb - 6, top: yOf(n.pitch, keyH) - Math.max(0, (24 - keyH) / 2), width: 22, height: Math.max(24, keyH) }}
+                      aria-label="Stretch note"
+                    >
+                      <div data-edge className="flex h-full w-full items-center justify-center rounded bg-white/90 text-[10px] text-black shadow">
+                        ↔
+                      </div>
+                    </div>
+                  ))}
 
               {marquee && (
                 <div
@@ -754,8 +889,8 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
                   style={{
                     left: Math.min(marquee.b0, marquee.b1) * ppb,
                     width: Math.abs(marquee.b1 - marquee.b0) * ppb,
-                    top: yOf(Math.max(marquee.p0, marquee.p1)),
-                    height: (Math.abs(marquee.p1 - marquee.p0) + 1) * KEY_H,
+                    top: yOf(Math.max(marquee.p0, marquee.p1), keyH),
+                    height: (Math.abs(marquee.p1 - marquee.p0) + 1) * keyH,
                   }}
                 />
               )}

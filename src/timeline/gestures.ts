@@ -179,6 +179,11 @@ export function startClipGesture(e: React.PointerEvent, clip: Clip, handle: Clip
     (ev, moved) => {
       const preview = useViewStore.getState().preview
       useViewStore.getState().setPreview(null)
+      if (ev && !moved && handle === 'body' && e.pointerType === 'touch' && !razor) {
+        // A tap on a clip (touch screens): its floating menu.
+        useViewStore.getState().setClipBubble({ clipId: clip.id, x: ev.clientX, y: ev.clientY })
+        return
+      }
       if (ev && !moved && razor) {
         // Cuts the clicked clip, and the other selected clips the cut runs through.
         const at = razorTime(ctx, ev.clientX)

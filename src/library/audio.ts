@@ -2,7 +2,10 @@
 
 import { engine } from '../audio/engine'
 import type { AssetMeta, Id } from '../model/types'
-import { addAudioClip, addTrackWithClip } from '../state/actions'
+import { addAudioClip, addTrackWithClip, replaceClipAudio, setPadSample } from '../state/actions'
+import { useViewStore } from '../state/viewStore'
+import { toast } from '../ui/toast'
+import { useShellStore } from '../ui/shell'
 import { useProjectStore } from '../state/projectStore'
 import { getDatabase } from '../storage/db'
 import { getSampleAudio, setSampleDuration } from './repo'
@@ -114,6 +117,7 @@ export async function assetForSample(id: Id): Promise<AssetMeta> {
  */
 export async function placeSample(id: Id, time: number, trackId?: Id | null) {
   const asset = await assetForSample(id)
+  warnSignature(id)
   const tracks = useProjectStore.getState().project.tracks
   if (trackId && tracks.find((t) => t.id === trackId)?.kind !== 'audio') trackId = null
   if (trackId) {
@@ -128,4 +132,42 @@ export async function placeSample(id: Id, time: number, trackId?: Id | null) {
   const free = tracks.find((t) => t.kind === 'audio' && t.clips.every((c) => c.start >= end || c.start + c.duration <= time))
   if (free) addAudioClip(free.id, asset, time)
   else addTrackWithClip(asset, time)
+}
+
+/** The sample's time signature when its name gives one that differs from the project's. */
+export function signatureMismatch(id: Id): string | null {
+  const sample = useLibraryStore.getState().samples.find((s) => s.id === id)
+  const { beats, unit } = useProjectStore.getState().project.timeSignature
+  return sample?.signature && sample.signature !== `${beats}/${unit}` ? sample.signature : null
+}
+
+/** Warns when a dropped sample is in another time signature (6/8 into 4/4…). */
+function warnSignature(id: Id) {
+  const other = signatureMismatch(id)
+  if (!other) return
+  const { beats, unit } = useProjectStore.getState().project.timeSignature
+  toast(`This sample is in ${other} and the project in ${beats}/${unit}: it may not line up with the bars.`)
+}
+
+/**
+ * Uses a library sample for what the library was opened to pick: added at the end of a track,
+ * swapped into a clip, or put on a drum pad. Closes the library on phones.
+ */
+export async function applyPickedSample(id: Id) {
+  const view = useViewStore.getState()
+  const pick = view.libraryPick
+  if (!pick) return
+  view.setLibraryPick(null)
+  if (useShellStore.getState().narrow) view.setLibraryOpen(false)
+  if (pick.kind === 'append') {
+    const track = useProjectStore.getState().project.tracks.find((t) => t.id === pick.trackId)
+    if (!track) return
+    const end = track.clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0)
+    await placeSample(id, end, track.id)
+  } else if (pick.kind === 'replace') {
+    warnSignature(id)
+    replaceClipAudio(pick.clipId, await assetForSample(id))
+  } else {
+    setPadSample(pick.trackId, pick.note, await assetForSample(id))
+  }
 }

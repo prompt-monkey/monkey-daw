@@ -12,6 +12,7 @@ import { useViewStore } from '../state/viewStore'
 import { placeSample, SAMPLE_DRAG_TYPE } from '../library/audio'
 import { toast } from '../ui/toast'
 import { ClipMenu, type ClipMenuState } from './ClipMenu'
+import { ClipBubble } from './ClipBubble'
 import { ClipView, type ClipHandle } from './ClipView'
 import { ChannelLaneRow } from '../automation/ChannelLaneRow'
 import { LaneView } from '../automation/LaneView'
@@ -476,6 +477,7 @@ export function Timeline() {
         />
       </div>
       <ClipMenu menu={clipMenu} onClose={() => setClipMenu(null)} />
+      <ClipBubble />
     </div>
   )
 }

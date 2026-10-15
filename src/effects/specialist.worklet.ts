@@ -1,7 +1,7 @@
 // AudioWorklet processors for effects batch 3. The DSP lives in specialist-dsp.ts; these classes
 // only move samples between Web Audio and it.
 
-import { DeEsser, Doubler, OptoCompressor, TransientShaper } from './specialist-dsp'
+import { AutoTuner, DeEsser, Doubler, OptoCompressor, SCALES, SCALE_KEYS, SyncShifter, TransientShaper } from './specialist-dsp'
 
 declare const sampleRate: number
 declare function registerProcessor(name: string, processor: unknown): void
@@ -116,7 +116,43 @@ class DoublerProcessor extends AudioWorkletProcessor {
   }
 }
 
+class AutoTuneProcessor extends AudioWorkletProcessor {
+  private tuner = new AutoTuner(sampleRate)
+  private shifters: SyncShifter[] = []
+
+  static get parameterDescriptors() {
+    return [
+      kRate('key', 0, 0, 11),
+      kRate('scale', 0, 0, SCALE_KEYS.length - 1),
+      kRate('retune', 40, 0, 400),
+      kRate('amount', 100, 0, 100),
+    ]
+  }
+
+  process(inputs: Float32Array[][], outputs: Float32Array[][], params: Params) {
+    const input = inputs[0]
+    const output = outputs[0]
+    if (!input || input.length === 0) {
+      for (const channel of output) channel.fill(0)
+      return true
+    }
+    const key = Math.round(params.key[0])
+    const scale = SCALES[SCALE_KEYS[Math.round(params.scale[0])]] ?? SCALES.chromatic
+    const retune = params.retune[0] / 1000
+    const amount = params.amount[0] / 100
+    while (this.shifters.length < output.length) this.shifters.push(new SyncShifter(sampleRate))
+    for (let i = 0; i < input[0].length; i++) {
+      let mono = 0
+      for (const channel of input) mono += channel[i] / input.length
+      const { ratio, period } = this.tuner.step(mono, key, scale, retune, amount)
+      for (let c = 0; c < output.length; c++) output[c][i] = this.shifters[c].next(input[Math.min(c, input.length - 1)][i], ratio, period)
+    }
+    return true
+  }
+}
+
 registerProcessor('monkey-daw-transient', TransientProcessor)
+registerProcessor('monkey-daw-autotune', AutoTuneProcessor)
 registerProcessor('monkey-daw-opto', OptoProcessor)
 registerProcessor('monkey-daw-deesser', DeEsserProcessor)
 registerProcessor('monkey-daw-doubler', DoublerProcessor)

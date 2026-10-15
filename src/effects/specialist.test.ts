@@ -37,7 +37,8 @@ const hit = (seconds = 0.5) => Float32Array.from({ length: Math.round(seconds * 
 
 describe('batch 3 definitions', () => {
   it('lists the specialist effects', () => {
-    expect(EFFECT_TYPES.filter((t) => EFFECTS[t].group === 'specialist')).toEqual(['transient', 'deesser', 'opto', 'doubler', 'amp'])
+    expect(EFFECT_TYPES.filter((t) => EFFECTS[t].group === 'specialist')).toEqual(['transient', 'deesser', 'opto', 'doubler', 'amp', 'autotune'])
+    expect(createEffect('autotune').params).toMatchObject({ key: '0', scale: 'chromatic', retune: 40, amount: 100 })
     expect(createEffect('amp').params).toMatchObject({ cabinet: '1x12', drive: 18 })
     expect(formatValue(EFFECTS.doubler.params[1] as NumberParam, 7.6)).toBe('8 ct')
   })

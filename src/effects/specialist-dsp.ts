@@ -191,3 +191,211 @@ export class Doubler {
     return [oct * Math.cos(octAngle) + uni * Math.cos(uniAngle), oct * Math.sin(octAngle) + uni * Math.sin(uniAngle)]
   }
 }
+
+// --- Auto-tune -----------------------------------------------------------------------------------
+
+/**
+ * YIN pitch detection on one block: the lag whose cumulative-mean-normalized difference first
+ * dips under the threshold is the period. Returns the frequency, or null if the block isn't
+ * clearly pitched (noise, breath, silence).
+ */
+export function detectPitch(x: Float32Array, sampleRate: number, minFreq = 70, maxFreq = 1000, threshold = 0.15): number | null {
+  const maxLag = Math.min(Math.floor(sampleRate / minFreq), Math.floor(x.length / 2))
+  const minLag = Math.max(2, Math.floor(sampleRate / maxFreq))
+  const window = x.length - maxLag
+  if (window < minLag) return null
+  const d = new Float32Array(maxLag + 1)
+  for (let lag = 1; lag <= maxLag; lag++) {
+    let sum = 0
+    for (let j = 0; j < window; j++) {
+      const diff = x[j] - x[j + lag]
+      sum += diff * diff
+    }
+    d[lag] = sum
+  }
+  // Cumulative mean normalized difference.
+  let running = 0
+  const cmnd = new Float32Array(maxLag + 1)
+  cmnd[0] = 1
+  for (let lag = 1; lag <= maxLag; lag++) {
+    running += d[lag]
+    cmnd[lag] = running > 0 ? (d[lag] * lag) / running : 1
+  }
+  for (let lag = minLag; lag < maxLag; lag++) {
+    if (cmnd[lag] >= threshold) continue
+    // Walk down to the bottom of this dip, then refine between samples with a parabola.
+    while (lag + 1 < maxLag && cmnd[lag + 1] < cmnd[lag]) lag++
+    const a = cmnd[lag - 1]
+    const b = cmnd[lag]
+    const c = cmnd[lag + 1]
+    const shift = (a - c) / (2 * (a - 2 * b + c) || 1)
+    return sampleRate / (lag + Math.max(-0.5, Math.min(0.5, shift)))
+  }
+  return null
+}
+
+/** Scales as the pitch classes they allow, counted from the key. */
+export const SCALES: Record<string, number[]> = {
+  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+  harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
+  majorPentatonic: [0, 2, 4, 7, 9],
+  minorPentatonic: [0, 3, 5, 7, 10],
+}
+export const SCALE_KEYS = Object.keys(SCALES)
+
+/** The nearest note (as a fractional MIDI number's target) in a key and scale. */
+export function nearestScaleNote(midi: number, key: number, scale: number[]): number {
+  let best = Math.round(midi)
+  let bestDistance = Infinity
+  for (let n = Math.floor(midi) - 6; n <= Math.ceil(midi) + 6; n++) {
+    if (!scale.includes((((n - key) % 12) + 12) % 12)) continue
+    const distance = Math.abs(n - midi)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = n
+    }
+  }
+  return best
+}
+
+/**
+ * Pitch shifter for small, slowly changing ratios (pitch correction). One read head drifts
+ * through a delay line at the ratio's speed; when it drifts too far it jumps back by a whole
+ * number of periods of the sound, cross-fading over a few milliseconds. Jumping by whole periods
+ * keeps the waveform aligned, so a sung note stays clean. With no period known it doesn't drift.
+ */
+export class SyncShifter {
+  private buffer: Float32Array
+  private write = 0
+  private delay: number
+  private nominal: number
+  private range: number
+  /** Second head during a cross-fade: its delay and the fade's progress (0…1). */
+  private fade: { delay: number; progress: number; step: number } | null = null
+
+  constructor(sampleRate: number) {
+    this.nominal = Math.round(0.025 * sampleRate)
+    this.range = Math.round(0.012 * sampleRate)
+    this.delay = this.nominal
+    this.buffer = new Float32Array(Math.round(0.1 * sampleRate))
+  }
+
+  private read(delay: number): number {
+    const size = this.buffer.length
+    const pos = this.write - 1 - delay
+    const i = Math.floor(pos)
+    const frac = pos - i
+    const a = this.buffer[((i % size) + size) % size]
+    const b = this.buffer[(((i + 1) % size) + size) % size]
+    return a + (b - a) * frac
+  }
+
+  /** `period` is the sound's period in samples (null when unpitched). */
+  next(x: number, ratio: number, period: number | null): number {
+    this.buffer[this.write % this.buffer.length] = x
+    this.write++
+    const drift = period ? 1 - ratio : 0
+    this.delay += drift
+    let out = this.read(this.delay)
+    if (this.fade) {
+      this.fade.delay += drift
+      const t = this.fade.progress
+      out = out * (1 - t) + this.read(this.fade.delay) * t
+      this.fade.progress += this.fade.step
+      if (this.fade.progress >= 1) {
+        this.delay = this.fade.delay
+        this.fade = null
+      }
+    } else if (period && Math.abs(this.delay - this.nominal) > this.range) {
+      // Jump toward the middle by whole periods.
+      const periods = Math.max(1, Math.round(Math.abs(this.delay - this.nominal) / period))
+      const target = this.delay + Math.sign(this.nominal - this.delay) * periods * period
+      if (target > 2 && target < this.buffer.length - 2) {
+        this.fade = { delay: target, progress: 0, step: 1 / Math.max(32, Math.min(period, 400)) }
+      }
+    }
+    return out
+  }
+}
+
+/**
+ * Real-time pitch correction: detects the pitch (YIN on a 2× down-sampled copy, every ~12 ms),
+ * snaps it to the nearest note of the key and scale, glides there at the retune speed, and
+ * shifts the sound by the difference.
+ */
+export class AutoTuner {
+  private sampleRate: number
+  private analysisRate: number
+  /** Ring buffer of the down-sampled signal, and the block handed to the detector. */
+  private ring: Float32Array
+  private ringWrite = 0
+  private block: Float32Array
+  private filled = 0
+  private pending = 0
+  private sinceAnalysis = 0
+  private hop: number
+  private shifter: SyncShifter
+  private period: number | null = null
+  private correction = 0
+  private target = 0
+  /** The last detected pitch and the note it is being pulled to (for display). */
+  heard: { midi: number; target: number } | null = null
+
+  constructor(sampleRate: number) {
+    this.sampleRate = sampleRate
+    this.analysisRate = sampleRate / 2
+    this.ring = new Float32Array(Math.round(this.analysisRate * 0.045))
+    this.block = new Float32Array(this.ring.length)
+    this.hop = Math.round(this.analysisRate * 0.012)
+    this.shifter = new SyncShifter(sampleRate)
+  }
+
+  private analyse(key: number, scale: number[], amount: number) {
+    // Oldest to newest.
+    const n = this.ring.length
+    this.block.set(this.ring.subarray(this.ringWrite), 0)
+    this.block.set(this.ring.subarray(0, this.ringWrite), n - this.ringWrite)
+    const f0 = detectPitch(this.block, this.analysisRate)
+    let level = 0
+    for (const v of this.block) level = Math.max(level, Math.abs(v))
+    if (!f0 || level < 0.003) {
+      this.period = null
+      this.target = 0
+      this.heard = null
+      return
+    }
+    const midi = 69 + 12 * Math.log2(f0 / 440)
+    const note = nearestScaleNote(midi, key, scale)
+    this.period = this.sampleRate / f0
+    this.target = (note - midi) * 100 * amount
+    this.heard = { midi, target: note }
+  }
+
+  /** One sample, shifted; `retune` is in seconds (0 = instant), `amount` 0–1. */
+  next(x: number, key: number, scale: number[], retune: number, amount: number): number {
+    const { ratio, period } = this.step(x, key, scale, retune, amount)
+    return this.shifter.next(x, ratio, period)
+  }
+
+  /**
+   * Follows the pitch for one (mono) sample and returns the shift to apply now, so several
+   * channels can each be shifted the same way with their own SyncShifter.
+   */
+  step(x: number, key: number, scale: number[], retune: number, amount: number): { ratio: number; period: number | null } {
+    // Average pairs of samples into the analysis history (a simple 2× down-sample).
+    this.pending += x
+    if (++this.sinceAnalysis % 2 === 0) {
+      this.ring[this.ringWrite] = this.pending / 2
+      this.ringWrite = (this.ringWrite + 1) % this.ring.length
+      this.pending = 0
+      this.filled = Math.min(this.ring.length, this.filled + 1)
+      if (this.filled === this.ring.length && (this.sinceAnalysis / 2) % this.hop === 0) this.analyse(key, scale, amount)
+    }
+    // Glide toward the target correction (in cents).
+    const k = retune <= 0 ? 1 : 1 - Math.exp(-1 / (retune * this.sampleRate))
+    this.correction += (this.target - this.correction) * k
+    return { ratio: 2 ** (this.correction / 1200), period: this.period }
+  }
+}

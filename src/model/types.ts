@@ -212,6 +212,7 @@ export type EffectType =
   | 'opto'
   | 'doubler'
   | 'amp'
+  | 'autotune'
 
 /** Parameter values: numbers in real units (Hz, dB, ms…), choices as strings, toggles as booleans. */
 export type EffectParams = Record<string, number | string | boolean>

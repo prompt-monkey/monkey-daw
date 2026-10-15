@@ -2,6 +2,7 @@
 // audio code, the rack UI and project loading all read from this one table.
 
 import { createId } from '../model/factory'
+import { SCALE_KEYS } from './specialist-dsp'
 import type { Effect, EffectParams, EffectType } from '../model/types'
 
 export type ParamUnit = 'Hz' | 'dB' | 'ms' | 's' | '%' | ':1' | 'Q' | 'bits' | 'x' | 'ct'
@@ -82,6 +83,16 @@ export const SYNC_DIVISIONS: Record<string, number> = {
   '1/8': 0.5,
   '1/8t': 1 / 3,
   '1/16': 0.25,
+}
+
+/** Auto-tune scale names. */
+const SCALE_LABELS: Record<string, string> = {
+  chromatic: 'Chromatic',
+  major: 'Major',
+  minor: 'Minor',
+  harmonicMinor: 'Harmonic minor',
+  majorPentatonic: 'Major pentatonic',
+  minorPentatonic: 'Minor pentatonic',
 }
 
 export const EFFECTS: Record<EffectType, EffectDef> = {
@@ -440,6 +451,31 @@ export const EFFECTS: Record<EffectType, EffectDef> = {
         default: '1x12',
       },
       num('output', 'Output', -30, 6, -12, 'dB'),
+    ],
+  },
+  autotune: {
+    type: 'autotune',
+    group: 'specialist',
+    name: 'Auto-tune',
+    description: 'Pulls the pitch to the nearest note of a key and scale: natural at slow retune, the hard robotic effect at 0 ms.',
+    params: [
+      {
+        kind: 'choice',
+        key: 'key',
+        label: 'Key',
+        options: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((label, i) => ({ value: String(i), label })),
+        default: '0',
+      },
+      {
+        kind: 'choice',
+        key: 'scale',
+        label: 'Scale',
+        options: SCALE_KEYS.map((value) => ({ value, label: SCALE_LABELS[value] ?? value })),
+        default: 'chromatic',
+      },
+      num('retune', 'Retune', 0, 400, 40, 'ms'),
+      num('amount', 'Amount', 0, 100, 100, '%'),
+      num('mix', 'Mix', 0, 100, 100, '%'),
     ],
   },
 }

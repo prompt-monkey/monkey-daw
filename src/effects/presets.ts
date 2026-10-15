@@ -84,6 +84,21 @@ export const BUILT_IN_PRESETS: ChainPreset[] = [
     ],
   },
   {
+    name: 'Vocal tune',
+    chain: [
+      { type: 'autotune', params: { key: '9', scale: 'minor', retune: 60, amount: 80 } },
+      { type: 'deesser', params: { freq: 6500, threshold: -32, range: 8 } },
+      { type: 'opto', params: { peakReduction: 40, gain: 4 } },
+    ],
+  },
+  {
+    name: 'Robot voice',
+    chain: [
+      { type: 'autotune', params: { scale: 'chromatic', retune: 0, amount: 100 } },
+      { type: 'plate', params: { decay: 1.2, mix: 15 } },
+    ],
+  },
+  {
     name: 'Vocal polish',
     chain: [
       { type: 'deesser', params: { freq: 6500, threshold: -32, range: 8 } },

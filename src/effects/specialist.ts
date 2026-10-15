@@ -3,6 +3,7 @@
 
 import type { Effect } from '../model/types'
 import { dbToGain } from './dsp'
+import { SCALE_KEYS } from './specialist-dsp'
 import { dryWet, identity, instance, nyquistSafe, type Binding, type EffectInstance } from './parts'
 
 type Builder = (ctx: BaseAudioContext, effect: Effect) => EffectInstance
@@ -148,6 +149,25 @@ function amp(ctx: BaseAudioContext): EffectInstance {
   })
 }
 
-type SpecialistType = 'transient' | 'deesser' | 'opto' | 'doubler' | 'amp'
+function autotune(ctx: BaseAudioContext): EffectInstance {
+  const dw = dryWet(ctx)
+  const node = workletNode(ctx, 'monkey-daw-autotune')
+  dw.input.connect(node).connect(dw.wet)
+  const bindings = { ...workletBindings(node, ['retune', 'amount']), mix: dw.mixBindings }
+  return instance(ctx, {
+    input: dw.input,
+    output: dw.output,
+    bindings: () => bindings,
+    // Key and scale are choices; the worklet takes them as numbers.
+    configure: (p) => {
+      if (!(node instanceof AudioWorkletNode)) return
+      node.parameters.get('key')?.setValueAtTime(Number(p.key), ctx.currentTime)
+      node.parameters.get('scale')?.setValueAtTime(Math.max(0, SCALE_KEYS.indexOf(p.scale as string)), ctx.currentTime)
+    },
+    nodes: () => [...dw.nodes, node],
+  })
+}
 
-export const SPECIALIST_BUILDERS: Record<SpecialistType, Builder> = { transient, deesser, opto, doubler, amp }
+type SpecialistType = 'transient' | 'deesser' | 'opto' | 'doubler' | 'amp' | 'autotune'
+
+export const SPECIALIST_BUILDERS: Record<SpecialistType, Builder> = { transient, deesser, opto, doubler, amp, autotune }

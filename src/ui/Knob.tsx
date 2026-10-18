@@ -128,7 +128,7 @@ export function Knob({ def, value, onChange, onCommit, disabled: off, display, a
         }
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-          <path d={arcPath(c, c, 15, START, START + ARC)} stroke="var(--color-line)" strokeWidth={4} fill="none" strokeLinecap="round" />
+          <path d={arcPath(c, c, 15, START, START + ARC)} stroke="oklch(100% 0 0 / 0.14)" strokeWidth={4} fill="none" strokeLinecap="round" />
           {position > 0.001 && (
             <path d={arcPath(c, c, 15, START, angle)} stroke="var(--color-accent)" strokeWidth={4} fill="none" strokeLinecap="round" />
           )}
@@ -148,7 +148,7 @@ export function Knob({ def, value, onChange, onCommit, disabled: off, display, a
         {def.label}
         {automated && <span className="ml-0.5 font-bold text-accent">A</span>}
       </span>
-      <span className="font-mono text-[10px]">{display ?? formatValue(def, value)}</span>
+      <span className="font-mono text-[10px] tabular-nums">{display ?? formatValue(def, value)}</span>
     </div>
   )
 }

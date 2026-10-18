@@ -3,6 +3,7 @@ import { removeAutomationLane } from '../state/actions'
 import { useViewStore } from '../state/viewStore'
 import { LaneView } from './LaneView'
 import { availableTargets } from './targets'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   channelId: Id | 'master'
@@ -16,7 +17,7 @@ interface Props {
   grid: React.CSSProperties
 }
 
-const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2 disabled:opacity-40'
+const small = 'btn btn-sm min-w-5'
 
 /** A timeline row with one automation lane of a bus or the master (they have no clips). */
 export function ChannelLaneRow({ channelId, name, channel, target, headerWidth, width, height, pps, grid }: Props) {
@@ -36,7 +37,7 @@ export function ChannelLaneRow({ channelId, name, channel, target, headerWidth, 
             value={target}
             onChange={(e) => setAutomationView(channelId, e.target.value)}
             aria-label={`${name} automation lane`}
-            className="min-w-0 flex-1 rounded border border-accent/60 bg-bg px-1 py-0.5 text-[11px] text-text"
+            className="field field-sm flex-1 border-accent/60"
           >
             {availableTargets(channel).map((t) => (
               <option key={t.target} value={t.target}>
@@ -48,8 +49,8 @@ export function ChannelLaneRow({ channelId, name, channel, target, headerWidth, 
           <button className={small} onClick={() => removeAutomationLane(channelId, target)} disabled={!hasPoints} title="Delete this lane's points">
             Clear
           </button>
-          <button className={small} onClick={() => setAutomationView(channelId, null)} aria-label="Hide automation" title="Hide this row">
-            ✕
+          <button className={`${small} btn-icon`} onClick={() => setAutomationView(channelId, null)} aria-label="Hide automation" title="Hide this row">
+            <Icon name="close" size={12} />
           </button>
         </div>
       </div>

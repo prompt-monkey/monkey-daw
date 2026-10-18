@@ -34,7 +34,7 @@ export function BottomPanel() {
       role="tab"
       aria-selected={panel === id}
       onClick={() => setPanel(id)}
-      className={`border-b-2 px-3 py-1.5 text-xs ${panel === id ? 'border-accent text-text' : 'border-transparent text-text-dim hover:text-text'}`}
+      className={`-mb-px border-b-2 px-3 py-2 text-xs font-medium transition-[color,border-color] duration-150 ease-out ${panel === id ? 'border-accent text-text' : 'border-transparent text-text-dim hover:text-text'}`}
     >
       {label}
     </button>

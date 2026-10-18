@@ -93,7 +93,7 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
-  const btn = 'rounded-md border border-line px-2.5 py-1 text-xs hover:bg-surface-2 disabled:opacity-40'
+  const btn = 'btn h-7 text-xs'
 
   return (
     <Dialog title="Projects" onClose={onClose} wide>
@@ -109,10 +109,10 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
             onBlur={(e) => e.target.value.trim() !== project.name && renameProject(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             aria-label="Project name"
-            className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
+            className="field h-8 text-sm"
           />
           <div className="flex flex-wrap gap-2">
-            <button className={`${btn} border-accent text-accent`} onClick={() => void saveCurrent()} disabled={saving}>
+            <button className={`${btn} btn-primary`} onClick={() => void saveCurrent()} disabled={saving}>
               Save (Ctrl+S)
             </button>
             <button className={btn} onClick={() => void saveCopy()} disabled={saving}>
@@ -131,7 +131,7 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
             </span>
             <div className="flex gap-2">
               <button
-                className={`${btn} border-accent text-accent`}
+                className={`${btn} btn-primary`}
                 onClick={async () => {
                   if (await saveCurrent()) await replaceWith(pending, true)
                 }}
@@ -171,7 +171,7 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
               />
             </div>
           </div>
-          <ul className="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-line" aria-label="Saved projects">
+          <ul className="flex max-h-64 flex-col overflow-y-auto overscroll-contain rounded-lg border border-line" aria-label="Saved projects">
             {projects.length === 0 && <li className="p-3 text-xs text-text-dim">No saved projects yet. Press Save to keep this one.</li>}
             {projects.map((p) => (
               <li key={p.id} className={`flex items-center gap-2 border-b border-line px-3 py-2 last:border-b-0 ${p.id === savedId ? 'bg-surface-2' : ''}`}>
@@ -181,7 +181,7 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
                       autoFocus
                       defaultValue={p.name}
                       aria-label="New project name"
-                      className="w-full rounded border border-line bg-bg px-1.5 py-0.5 text-sm"
+                      className="field h-7 w-full text-sm"
                       onBlur={(e) => {
                         setRenaming(null)
                         if (e.target.value.trim() && e.target.value !== p.name) void renameSaved(p.id, e.target.value, renameProject)

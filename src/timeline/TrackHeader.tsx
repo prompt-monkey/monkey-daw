@@ -23,7 +23,9 @@ import { readInputMeter, toggleArm } from '../recording/session'
 import { useRecordingStore } from '../recording/store'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
+import { Icon } from '../ui/Icon'
 import { Menu } from '../ui/Menu'
+import { rangeFill } from '../ui/rangeFill'
 import { useAutomatedValue } from '../automation/useAutomatedValue'
 import { availableTargets } from '../automation/targets'
 import { useHeaderWidth, useShellStore } from '../ui/shell'
@@ -52,7 +54,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
   // Phones: a narrower header, name and buttons on separate rows, volume and pan in the mixer.
   const narrow = useShellStore((s) => s.narrow)
   const headerWidth = useHeaderWidth()
-  const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
+  const small = 'btn btn-sm min-w-5'
   // Phones: volume, pan, solo, mute and delete in a panel of their own.
   const [mixOpen, setMixOpen] = useState(false)
 
@@ -67,7 +69,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
     automated: boolean,
   ) => (
     <label className="grid grid-cols-[2rem_1fr_2.75rem] items-center gap-2 text-[10px] text-text-dim">
-      <span>
+      <span className="label">
         {label}
         {automated && <span className="ml-0.5 font-bold text-accent" title="Automated">A</span>}
       </span>
@@ -83,9 +85,10 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
         onKeyUp={endGesture}
         onDoubleClick={() => onChange(reset)}
         aria-label={`${track.name} ${label.toLowerCase()}`}
+        style={rangeFill(value, min, max, min < 0 ? 0 : min)}
         title={automated ? 'Automated: edit the lane on the timeline' : undefined}
       />
-      <span className="text-right font-mono">{text}</span>
+      <span className="text-right font-mono tabular-nums">{text}</span>
     </label>
   )
 
@@ -122,7 +125,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
         value={laneTarget}
         onChange={(e) => setAutomationView(track.id, e.target.value)}
         aria-label={`${track.name} automation lane`}
-        className="min-w-0 flex-1 rounded border border-accent/60 bg-bg px-1 py-0.5 text-[11px] text-text"
+        className="field field-sm flex-1 border-accent/60"
       >
         {availableTargets(track).map((t) => (
           <option key={t.target} value={t.target}>
@@ -139,8 +142,8 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
       >
         Clear
       </button>
-      <button className={small} onClick={() => setAutomationView(track.id, null)} title="Back to the clips" aria-label="Hide automation">
-        ✕
+      <button className={`${small} btn-icon`} onClick={() => setAutomationView(track.id, null)} title="Back to the clips" aria-label="Hide automation">
+        <Icon name="close" size={12} />
       </button>
     </div>
   )
@@ -152,10 +155,10 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
     >
       <div
         onPointerDown={(e) => onGripDown(e, track.id)}
-        className="flex w-4 shrink-0 cursor-grab items-center justify-center text-text-dim/60 hover:text-text"
+        className="flex w-4 shrink-0 cursor-grab touch-none items-center justify-center text-text-dim/50 hover:text-text"
         title="Drag to reorder"
       >
-        ⠿
+        <Icon name="grip" size={14} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 py-1 pr-2">
         <div className={`flex items-center gap-1 ${narrow ? 'flex-wrap' : ''}`}>
@@ -170,24 +173,30 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           {track.kind !== 'audio' ? (
             <button
               onClick={editNotes}
-              className={`${small} max-w-16 truncate text-accent`}
-              title={track.kit ? 'Edit the beat in the drum editor' : 'Edit the notes in the piano roll'}
+              className={`${small} btn-icon text-accent`}
+              title={
+                track.kit
+                  ? `${presetName(track.kit.preset)} kit · edit the beat in the drum editor`
+                  : `${track.instrument ? INSTRUMENT_LABELS[track.instrument.type] : 'Instrument'} · edit the notes in the piano roll`
+              }
+              aria-label={track.kit ? 'Edit the beat' : 'Edit the notes'}
             >
-              {track.kit ? `▦ ${presetName(track.kit.preset)}` : `♪ ${track.instrument ? INSTRUMENT_LABELS[track.instrument.type] : ''}`}
+              <Icon name={track.kit ? 'pads' : 'keys'} size={12} />
             </button>
           ) : (
             <button
               onClick={() => void toggleArm(track.id)}
-              className={`${small} ${armed ? 'border-danger bg-danger text-white' : 'text-danger'}`}
+              className={`${small} btn-icon btn-rec ${armed ? '' : 'btn-danger'}`}
               aria-pressed={armed}
               title={armed ? 'Disarm (stop listening to the input)' : 'Arm this track for recording'}
+              aria-label="Arm for recording"
             >
-              ●
+              <Icon name="record" size={10} />
             </button>
           )}
           <button
             onClick={() => toggleMute(track.id)}
-            className={`${small} ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
+            className={`${small} btn-mute`}
             aria-pressed={track.muted}
             title="Mute"
           >
@@ -195,7 +204,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           </button>
           <button
             onClick={() => toggleSolo(track.id)}
-            className={`${small} ${track.solo ? 'bg-accent text-accent-ink' : ''}`}
+            className={`${small} btn-solo`}
             aria-pressed={track.solo}
             title="Solo"
           >
@@ -204,11 +213,11 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           {narrow && track.kind === 'audio' && (
             <button
               onClick={() => useViewStore.getState().setLibraryPick({ kind: 'append', trackId: track.id })}
-              className={small}
+              className={`${small} btn-icon`}
               aria-label={`Add a sample at the end of ${track.name}`}
               title="Add a sample from the library at the end of this track"
             >
-              +
+              <Icon name="plus" size={12} />
             </button>
           )}
           {narrow && (
@@ -218,7 +227,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
           )}
           <Menu
             label="Track options"
-            className={small}
+            className={`${small} btn-icon btn-ghost`}
             items={[
               { label: 'Insert track above', onSelect: () => addTrack(index) },
               { label: 'Insert track below', onSelect: () => addTrack(index + 1) },
@@ -240,7 +249,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
               { label: 'Delete track', onSelect: () => removeTrack(track.id), danger: true },
             ]}
           >
-            ⋮
+            <Icon name="more" size={14} />
           </Menu>
         </div>
         {!narrow &&
@@ -296,14 +305,14 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
             <div className="flex gap-2">
               <button
                 onClick={() => toggleMute(track.id)}
-                className={`flex-1 rounded-md border border-line py-2 text-sm ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
+                className="btn btn-mute h-9 flex-1"
                 aria-pressed={track.muted}
               >
                 Mute
               </button>
               <button
                 onClick={() => toggleSolo(track.id)}
-                className={`flex-1 rounded-md border border-line py-2 text-sm ${track.solo ? 'bg-accent text-accent-ink' : ''}`}
+                className="btn btn-solo h-9 flex-1"
                 aria-pressed={track.solo}
               >
                 Solo
@@ -314,7 +323,7 @@ export const TrackHeader = memo(function TrackHeader({ track, index, color, comp
                 setMixOpen(false)
                 removeTrack(track.id)
               }}
-              className="rounded-md border border-danger/60 py-2 text-sm text-danger"
+              className="btn btn-danger h-9"
             >
               Delete track
             </button>

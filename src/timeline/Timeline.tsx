@@ -25,6 +25,7 @@ import { startClipGesture, startLaneGesture, startTrackReorder, type GestureCont
 import { Ruler } from './Ruler'
 import { TrackHeader } from './TrackHeader'
 import { usePlayheadFrame } from './usePlayheadFrame'
+import { Icon } from '../ui/Icon'
 
 /** Empty space kept after the last clip, in seconds. */
 const TAIL_SECONDS = 30
@@ -53,7 +54,8 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
   const trackHeight = useViewStore((s) => s.trackHeight)
   const follow = useViewStore((s) => s.followPlayhead)
   const view = useViewStore.getState()
-  const btn = 'shrink-0 rounded border border-line px-1.5 py-0.5 text-[11px] leading-4 hover:bg-surface-2'
+  const btn = 'btn btn-sm h-6 px-2'
+  const iconBtn = 'btn btn-sm btn-icon size-6'
 
   const addTone = () => {
     const { project } = useProjectStore.getState()
@@ -71,6 +73,7 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
       style={{ width: headerWidth, height: RULER_HEIGHT }}
     >
       <button className={btn} onClick={() => fileRef.current?.click()} title="Import WAV, MP3 or MIDI files, each into a new track">
+        <Icon name="upload" size={12} />
         Import
       </button>
       <input
@@ -89,37 +92,39 @@ function TimelineToolbar({ onFit }: { onFit: () => void }) {
       />
       {import.meta.env.DEV && !narrow && (
         <button className={btn} onClick={addTone} title="Development: add a synthesized clip">
-          + Tone
+          Tone
         </button>
       )}
       <span className="flex-1" />
-      <button className={btn} onClick={() => view.setPps(pps / 1.5)} title="Zoom out (Ctrl + wheel)">
-        −
+      <button className={iconBtn} onClick={() => view.setPps(pps / 1.5)} title="Zoom out (Ctrl + wheel)" aria-label="Zoom out">
+        <Icon name="zoomOut" size={14} />
       </button>
-      <button className={btn} onClick={() => view.setPps(pps * 1.5)} title="Zoom in (Ctrl + wheel)">
-        +
+      <button className={iconBtn} onClick={() => view.setPps(pps * 1.5)} title="Zoom in (Ctrl + wheel)" aria-label="Zoom in">
+        <Icon name="zoomIn" size={14} />
       </button>
       {!narrow && (
-        <button className={btn} onClick={onFit} title="Fit the project in view">
-          Fit
+        <button className={iconBtn} onClick={onFit} title="Fit the project in view" aria-label="Fit the project in view">
+          <Icon name="fit" size={14} />
         </button>
       )}
       <button
-        className={`${btn} ${follow ? 'bg-surface-2 text-accent' : ''}`}
+        className={iconBtn}
         onClick={() => view.setFollowPlayhead(!follow)}
         aria-pressed={follow}
         title="Follow the playhead while playing"
+        aria-label="Follow the playhead"
         hidden={narrow}
       >
-        ⇥
+        <Icon name="follow" size={14} />
       </button>
       <button
         hidden={narrow}
-        className={btn}
+        className={iconBtn}
         onClick={() => view.setTrackHeight(trackHeight === 'normal' ? 'compact' : 'normal')}
         title={trackHeight === 'normal' ? 'Compact track height' : 'Normal track height'}
+        aria-label={trackHeight === 'normal' ? 'Compact track height' : 'Normal track height'}
       >
-        {trackHeight === 'normal' ? '▭' : '▤'}
+        <Icon name={trackHeight === 'normal' ? 'rowsNormal' : 'rowsCompact'} size={14} />
       </button>
     </div>
   )
@@ -454,17 +459,18 @@ export function Timeline() {
         <div className="sticky left-0 flex flex-wrap gap-1.5 p-3" style={{ width: headerWidth }}>
           {(
             [
-              ['audio', '+ Audio', 'Add an audio track: clips, samples and recordings'],
-              ['midi', '+ MIDI', 'Add a MIDI track: notes played by an instrument'],
-              ['drums', '+ Drums', 'Add a drum track: drum pads with a step sequencer'],
+              ['audio', 'Audio', 'Add an audio track: clips, samples and recordings'],
+              ['midi', 'MIDI', 'Add a MIDI track: notes played by an instrument'],
+              ['drums', 'Drums', 'Add a drum track: drum pads with a step sequencer'],
             ] as const
           ).map(([kind, label, title]) => (
             <button
               key={kind}
               onClick={() => addTrack(undefined, kind)}
-              className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm whitespace-nowrap hover:bg-surface-2"
+              className="btn h-8 flex-1 ps-2 text-text-dim"
               title={title}
             >
+              <Icon name="plus" size={14} />
               {label}
             </button>
           ))}

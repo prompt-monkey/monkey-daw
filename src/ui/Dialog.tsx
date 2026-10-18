@@ -30,7 +30,7 @@ export function Dialog({ title, onClose, dismissible = true, wide = false, child
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
+      className="fade-in fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
       onPointerDown={(e) => e.target === e.currentTarget && dismissible && onClose()}
     >
       <div
@@ -38,7 +38,7 @@ export function Dialog({ title, onClose, dismissible = true, wide = false, child
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`w-full ${wide ? 'max-w-xl' : 'max-w-md'} rounded-xl border border-line bg-surface p-5 text-text shadow-2xl`}
+        className={`enter max-h-[calc(100dvh-2rem)] w-full overflow-y-auto overscroll-contain ${wide ? 'max-w-xl' : 'max-w-md'} rounded-xl border border-transparent bg-surface p-5 text-text shadow-popover`}
       >
         <h2 className="mb-4 text-base font-semibold">{title}</h2>
         {children}

@@ -50,12 +50,17 @@ function MenuList({
   onClose: () => void
 }) {
   return createPortal(
-    <div ref={listRef} role="menu" className="fixed z-[100] min-w-40 rounded-md border border-line bg-surface-2 py-1 shadow-xl" style={style}>
+    <div
+      ref={listRef}
+      role="menu"
+      className="fixed z-[100] max-h-[70vh] min-w-44 overflow-y-auto overscroll-contain rounded-lg border border-transparent bg-surface-2 p-1 shadow-popover"
+      style={style}
+    >
       {items.map((item) => (
         <button
           key={item.label}
           role="menuitem"
-          className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-surface ${item.danger ? 'text-danger' : ''}`}
+          className={`block w-full rounded px-2.5 py-1.5 text-left text-xs whitespace-nowrap transition-[background-color] duration-150 ease-out hover:bg-surface-3 ${item.danger ? 'text-danger' : ''}`}
           onClick={() => {
             onClose()
             item.onSelect()

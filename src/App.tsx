@@ -15,8 +15,8 @@ const ShortcutsDialog = lazy(() => import('./ui/ShortcutsDialog').then((m) => ({
 /** On phones, side panels slide over the timeline instead of taking its room. */
 function Drawer({ side, onClose, children }: { side: 'left' | 'right'; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[150] flex bg-black/50" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`flex h-full max-w-[88vw] shadow-2xl ${side === 'right' ? 'ml-auto' : ''}`}>{children}</div>
+    <div className="fade-in fixed inset-0 z-[150] flex bg-black/50" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`flex h-full max-w-[88vw] overscroll-contain shadow-popover ${side === 'right' ? 'ml-auto' : ''}`}>{children}</div>
     </div>
   )
 }
@@ -64,12 +64,12 @@ export default function App() {
         </Suspense>
       )}
       {!narrow && (
-        <footer className="flex gap-3 border-t border-line px-4 py-1.5 text-[11px] text-text-dim">
+        <footer className="flex items-center gap-3 border-t border-line bg-surface px-4 py-1 text-[11px] text-text-dim">
           <span>
             Space play/pause · Ctrl+Z undo · Ctrl+S save · drag samples, WAV/MP3 or MIDI files onto the timeline · right-click a
             clip for options
           </span>
-          <button className="ml-auto text-accent hover:underline" onClick={() => view.setShortcutsOpen(true)}>
+          <button className="btn btn-sm btn-ghost ml-auto" onClick={() => view.setShortcutsOpen(true)}>
             All shortcuts (?)
           </button>
         </footer>

@@ -70,7 +70,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
       ['Shift + click', 'Accented hit'],
       ['Alt + click a hit', 'Change its velocity'],
       ['Drop a sample on a pad', 'Use it on that pad'],
-      ['▾ on a row · drop on a row name', 'Change that row’s sound'],
+      ['The arrow on a row · drop on a row name', 'Change that row’s sound'],
     ],
   },
   {
@@ -78,7 +78,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
     items: [
       ['Drag or wheel on a knob', 'Change it (Shift for fine steps)'],
       ['Double-click a knob', 'Reset'],
-      ['Right-click a knob · ∿ on the card', 'Automate it'],
+      ['Right-click a knob · the curve button on the card', 'Automate it'],
       ['Drag an effect header', 'Reorder the chain'],
     ],
   },
@@ -87,7 +87,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog title="Keyboard and mouse shortcuts" onClose={onClose} wide>
-      <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto pr-1">
+      <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto overscroll-contain pr-1">
         {SHORTCUTS.map((group) => (
           <section key={group.title}>
             <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-accent uppercase">{group.title}</h3>

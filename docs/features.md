@@ -11,29 +11,30 @@ in total) and was checked in Chrome.
 
 | Phase | Step | Status | Commit |
 |---|---|---|---|
-| 0 | Foundation: data model, undo/redo, audio engine and scheduler | Done | `1ce5b5f` |
-| 1 | Timeline: ruler, clip editing, waveforms, selection, zoom | Done | `e121d45` |
-| 1 | Tracks and mixer: buses, sends, routing, meters, track management | Done | `5591d58` |
-| 1 | Export: WAV mix (whole project or loop) | Done | `0eab8e0` |
-| 2 | Projects and storage: save/open, recovery autosave, `.mdaw` project file | Done | `3fe3cba` |
-| 2 | Sample browser: libraries, tagging, filters, preview, drag to tracks | Done | `b2f1f9a` |
-| 2 | Recording and metronome | Done | `da81b00` |
-| 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `177f1a8`, `1588287` |
-| 3 | Automation: volume, pan and effect parameters on tracks | Done | `4f14e62` |
-| 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `02bc687` |
-| 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `7d0ac05` |
-| 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `96f4544` |
-| 5 | Export: MP3, stems as a ZIP | Done | `dad7618` |
-| 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | `3d54e4b` |
-| 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | `73d7ab2` |
-| 6 | Effects batch 2: character and space (14 effects) | Done | `ae07721` |
-| 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | `b229b4f` |
-| 6 | Effects batch 3: auto-tune | Done | `642b1fd` |
-| 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `36f01b8` |
-| 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | `889bfee` |
-| 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | `d726e7b` |
-| 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | `3b9b8b9` |
-| 11 | Faster first load: editors and dialogs load on first use, libraries in their own chunks | Done | |
+| 0 | Foundation: data model, undo/redo, audio engine and scheduler | Done | `dc582ec` |
+| 1 | Timeline: ruler, clip editing, waveforms, selection, zoom | Done | `a94523f` |
+| 1 | Tracks and mixer: buses, sends, routing, meters, track management | Done | `3d078c5` |
+| 1 | Export: WAV mix (whole project or loop) | Done | `d54aeea` |
+| 2 | Projects and storage: save/open, recovery autosave, `.mdaw` project file | Done | `dfd0122` |
+| 2 | Sample browser: libraries, tagging, filters, preview, drag to tracks | Done | `73e9f52` |
+| 2 | Recording and metronome | Done | `c2fda84` |
+| 3 | Effects rack with batch 1 (7 effects), presets, export tails | Done | `b1812fa`, `4753a59` |
+| 3 | Automation: volume, pan and effect parameters on tracks | Done | `a0bd103` |
+| 4 | Piano roll: MIDI tracks, instruments, note editing, PAT/SONG, MIDI import | Done | `3490283` |
+| 4 | Drums: pads, step sequencer, kit presets, pattern generator | Done | `490c1f4` |
+| 4 | Tempo sync: BPM from file names, Stretch and Resample modes | Done | `8a586cf` |
+| 5 | Export: MP3, stems as a ZIP | Done | `0545a52` |
+| 5 | Lyrics: sections, Write and Sing modes, copy, .txt | Done | `5af3323` |
+| 5 | App shell: shortcuts guide, lite mode, fullscreen, phone layout | Done | `1c6f558` |
+| 6 | Effects batch 2: character and space (14 effects) | Done | `de220a1` |
+| 6 | Effects batch 3: transient shaper, de-esser, opto compressor, 12-string doubler, amp/cabinet | Done | `56bd0f8` |
+| 6 | Effects batch 3: auto-tune | Done | `dde11e0` |
+| 7 | Follow-ups: auto-tune readout, drum choke groups, compact phone top bar, clip reverse / pitch / curved fades / consolidate / convert to audio, automation on buses and the master, writing automation, graphic pitch editor | Done | `ab2930d` |
+| 8 | Feature pass: effects batch 4 (crystal, tape echo, sub booster, brass enhancer, vinyl), new modes and controls on 13 effects, effect card screens, razor, Shift+drag stretch, replace audio, BPM wheel/drag, magnet and other keys, piano roll brush, per-effect automate button, insert effect here, kit from library, R&B genre, record without arming | Done | `1b4f940` |
+| 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | `b72a5bc` |
+| 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | `0b41424` |
+| 11 | Faster first load: editors and dialogs load on first use, libraries in their own chunks | Done | `fc150d2` |
+| 12 | UI polish: shared button, field and slider styles, one icon set, a two-row transport bar | Done | |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
@@ -419,7 +420,7 @@ A static app with no backend.
 |---|---|---|
 | Language and build | TypeScript + Vite | Fast development builds, easy setup for AudioWorklets and Web Workers |
 | UI | React | Large ecosystem; the parts that need speed (timeline, meters) live outside React anyway |
-| Styling and components | Tailwind CSS with small custom components (dialog, menu, knob) | One dark theme via CSS variables; shadcn/ui (Radix) wasn't needed so far |
+| Styling and components | Tailwind CSS with small custom components (dialog, menu, knob, icons) | One dark theme via CSS variables; shadcn/ui (Radix) wasn't needed so far |
 | State and undo/redo | Zustand + Immer, with a command history for undo/redo | Simple, fast, and lets the audio engine subscribe outside React |
 | Audio engine | Web Audio API, our own engine (no Tone.js) | Full control of routing, buses and sends; one scheduler shared by live playback and offline export |
 | Custom DSP | AudioWorklet | Auto-pitch and effects the built-in audio nodes can't do |
@@ -440,6 +441,18 @@ Once the app has started and the browser is idle, the editors and dialogs are fe
 background, so opening one doesn't wait. In total the page starts with about 550 kB of script
 instead of 665 kB. The effects' audio code stays in the core: a project needs it as soon as it
 plays.
+
+Look (step 12): every control is built from a few shared styles in `src/index.css`: `.btn` (with
+`btn-sm`, `btn-icon`, `btn-primary`, `btn-ghost`, and `btn-mute`, `btn-solo` and `btn-rec` for
+the pressed colors DAWs use), `.field` for inputs and selects, `.seg` for segmented choices, and
+styled sliders whose filled part comes from `rangeFill` (the mixer's vertical faders use
+`.fader`). Buttons are raised surfaces drawn with a thin ring, toggles show their state with
+`aria-pressed`, and icons come from one set in `src/ui/Icon.tsx` in the text color. Motion is
+short and only where it helps: a 150 ms ease on hover and press (buttons shrink to 0.96 while
+pressed), play and pause cross-fade, and dialogs, drawers and toasts fade in. Movement, scale and
+blur are skipped when the system asks for reduced motion, and hover styles apply only to devices
+that can hover. The transport bar has two rows on a computer: the project and the panels on top,
+the transport centered below.
 
 Decisions:
 - React over Svelte/Solid: the safer pick for a large UI.

@@ -78,7 +78,7 @@ export function TempoControl({ className = '' }: { className?: string }) {
           if (e.key === 'Enter') commit()
           if (e.key === 'Escape') setDraft(null)
         }}
-        className={`rounded-md border border-accent bg-bg px-2 py-1 font-mono text-text ${className}`}
+        className={`field border-accent text-right font-mono tabular-nums ${className}`}
       />
     )
   }
@@ -107,7 +107,7 @@ export function TempoControl({ className = '' }: { className?: string }) {
         }
       }}
       title="Wheel or drag up/down · Shift = ±5 (fine when dragging) · double-click to type"
-      className={`cursor-ns-resize touch-none rounded-md border border-line bg-bg px-2 py-1 text-right font-mono text-text select-none hover:border-text-dim ${className}`}
+      className={`field flex cursor-ns-resize touch-none items-center justify-end font-mono tabular-nums select-none ${className}`}
     >
       {Number.isInteger(bpm) ? bpm : bpm.toFixed(1)}
     </div>

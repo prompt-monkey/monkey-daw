@@ -4,7 +4,7 @@ import type { MidiClip } from '../model/types'
 import { renameClip, setClipSwing } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
-import { segClass } from './styles'
+import { rangeFill } from '../ui/rangeFill'
 
 export function ClipNameInput({ clip }: { clip: MidiClip }) {
   return (
@@ -47,8 +47,9 @@ export function SwingControl({ clip }: { clip: MidiClip }) {
         }}
         aria-label="Swing"
         className="w-16"
+        style={rangeFill(swing, 0, 100)}
       />
-      <span className="w-8 font-mono text-text">{swing}%</span>
+      <span className="w-8 font-mono text-text tabular-nums">{swing}%</span>
     </label>
   )
 }
@@ -58,16 +59,15 @@ export function PlaybackModeToggle() {
   const patternMode = useViewStore((s) => s.patternMode)
   const setPatternMode = useViewStore((s) => s.setPatternMode)
   return (
-    <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Playback mode">
+    <div className="seg" role="group" aria-label="Playback mode">
       <button
-        className={segClass(patternMode)}
         aria-pressed={patternMode}
         onClick={() => setPatternMode(true)}
         title="PAT: play only this clip, looping, while the editor is open"
       >
         PAT
       </button>
-      <button className={segClass(!patternMode)} aria-pressed={!patternMode} onClick={() => setPatternMode(false)} title="SONG: play the whole project">
+      <button aria-pressed={!patternMode} onClick={() => setPatternMode(false)} title="SONG: play the whole project">
         SONG
       </button>
     </div>

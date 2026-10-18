@@ -17,10 +17,12 @@ import {
 } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { useViewStore } from '../state/viewStore'
+import { Icon } from '../ui/Icon'
+import { rangeFill } from '../ui/rangeFill'
 import { LevelMeter } from './LevelMeter'
 import { VuMeter } from './VuMeter'
 
-const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-none hover:bg-surface-2'
+const small = 'btn btn-sm h-6 min-w-6'
 
 /** Badge shown on controls that automation is driving. */
 const AutoBadge = () => (
@@ -106,8 +108,8 @@ function Fader({
       onDoubleClick={() => !locked && onChange(1)}
       aria-label={`${label} volume`}
       title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Drag, wheel or ↑/↓ (Shift: fine) · double-click for 0 dB'}
-      className={`h-full w-6 ${locked ? 'cursor-default' : 'cursor-pointer'}`}
-      style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+      className="fader"
+      style={rangeFill(gainToFader(gain), 0, 1)}
     />
   )
 }
@@ -128,8 +130,8 @@ function PanSlider({
   return (
     <label className="flex flex-col gap-0.5 text-[10px] text-text-dim">
       <span className="flex justify-between">
-        <span>
-          PAN
+        <span className="label">
+          Pan
           {automated && <AutoBadge />}
         </span>
         <span className="font-mono">{Math.abs(pan) < 0.005 ? 'C' : `${pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(pan) * 100)}`}</span>
@@ -146,6 +148,7 @@ function PanSlider({
         onKeyUp={endGesture}
         onDoubleClick={() => !locked && onChange(0)}
         aria-label={`${label} pan`}
+        style={rangeFill(pan, -1, 1, 0)}
         title={locked ? AUTOMATED_TITLE : automated ? WRITING_TITLE : 'Double-click to center'}
       />
     </label>
@@ -159,7 +162,7 @@ function FxButton({ channel, effects, bypassed }: { channel: Id | 'master'; effe
   return (
     <button
       onClick={() => openRack(channel)}
-      className={`${small} ${active ? 'border-accent text-accent' : ''}`}
+      className={`${small} ${active ? 'text-accent' : ''}`}
       title={
         effects.length
           ? `Effects: ${effects.map((e) => EFFECTS[e.type].name).join(', ')}${bypassed ? ' (bypassed)' : ''}`
@@ -219,12 +222,12 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
       <div className="truncate text-xs font-semibold" title={track.name}>
         {track.name}
       </div>
-      <label className="flex items-center gap-1 text-[10px] text-text-dim">
-        OUT
+      <label className="flex items-center gap-1.5">
+        <span className="label">Out</span>
         <select
           value={track.output}
           onChange={(e) => setTrackOutput(track.id, e.target.value)}
-          className="min-w-0 flex-1 rounded border border-line bg-bg px-1 py-0.5 text-[11px] text-text"
+          className="field field-sm flex-1"
           aria-label={`${track.name} output`}
         >
           <option value="master">Master</option>
@@ -256,6 +259,7 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
                   aria-label={`${track.name} send to ${bus.name}`}
                   title="Post-fader send · double-click to toggle 0 dB / off"
                   className="col-span-2"
+                  style={rangeFill(gainToFader(level), 0, 1)}
                 />
               </label>
             )
@@ -278,7 +282,7 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
       <div className="flex justify-center gap-1">
         <button
           onClick={() => toggleMute(track.id)}
-          className={`${small} ${track.muted ? 'bg-warn text-accent-ink' : ''}`}
+          className={`${small} btn-mute`}
           aria-pressed={track.muted}
           title="Mute"
         >
@@ -286,7 +290,7 @@ export const TrackStrip = memo(function TrackStrip({ track, color, buses }: { tr
         </button>
         <button
           onClick={() => toggleSolo(track.id)}
-          className={`${small} ${track.solo ? 'bg-accent text-accent-ink' : ''}`}
+          className={`${small} btn-solo`}
           aria-pressed={track.solo}
           title="Solo"
         >
@@ -308,7 +312,7 @@ function AutomationButton({ channelId, channel }: { channelId: Id | 'master'; ch
         const withPoints = channel.automation.find((l) => l.points.length > 0)
         view.setAutomationView(channelId, shown ? null : (withPoints?.target ?? 'volume'))
       }}
-      className={`${small} ${shown ? 'bg-accent text-accent-ink' : ''}`}
+      className={small}
       aria-pressed={shown}
       title={shown ? 'Hide the automation row' : 'Show automation on the timeline (under the tracks)'}
     >
@@ -331,8 +335,8 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
           aria-label="Bus name"
           className="min-w-0 flex-1 truncate rounded bg-transparent px-0.5 text-xs font-semibold hover:bg-surface-2 focus:bg-bg"
         />
-        <button onClick={() => removeBus(bus.id)} className={`${small} hover:text-danger`} title="Delete bus">
-          ✕
+        <button onClick={() => removeBus(bus.id)} className={`${small} btn-ghost hover:text-danger`} title="Delete bus" aria-label="Delete bus">
+          <Icon name="close" size={14} />
         </button>
       </div>
       <div className="line-clamp-3 text-[10px] text-text-dim" title={sources.join(', ')}>
@@ -354,7 +358,7 @@ export const BusStrip = memo(function BusStrip({ bus, sources }: { bus: Bus; sou
       <div className="flex justify-center gap-1">
         <button
           onClick={() => toggleMute(bus.id)}
-          className={`${small} ${bus.muted ? 'bg-warn text-accent-ink' : ''}`}
+          className={`${small} btn-mute`}
           aria-pressed={bus.muted}
           title="Mute"
         >
@@ -372,8 +376,8 @@ export function MasterStrip() {
   const autoVolume = useAutomatedValue(master, 'volume')
   return (
     <div className="flex h-full w-40 shrink-0 flex-col gap-2 border-l border-line bg-surface px-3 py-2">
-      <div className="text-xs font-semibold">Master</div>
-      <VuMeter className="h-16 w-full rounded-md border border-line bg-bg" />
+      <div className="text-xs font-semibold tracking-wide">Master</div>
+      <VuMeter className="h-16 w-full rounded-md border border-transparent bg-bg shadow-ring" />
       <FaderSection
         channelId="master"
         label="Master"
@@ -384,7 +388,7 @@ export function MasterStrip() {
       <div className="flex justify-center gap-1">
         <button
           onClick={toggleMasterMute}
-          className={`${small} ${master.muted ? 'bg-warn text-accent-ink' : ''}`}
+          className={`${small} btn-mute`}
           aria-pressed={master.muted}
           title="Mute master"
         >

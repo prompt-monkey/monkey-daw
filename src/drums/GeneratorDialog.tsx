@@ -57,7 +57,7 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
   const tempoDiffers = Math.abs(bpm - genre.tempo) > 0.5
   const bars = Math.round((clip.duration / secondsPerBar(bpm, useProjectStore.getState().project.timeSignature)) * 100) / 100
   const field = 'flex flex-col gap-1 text-xs text-text-dim'
-  const select = 'rounded-md border border-line bg-bg px-2 py-1.5 text-sm text-text'
+  const select = 'field h-8 text-sm'
 
   return (
     <Dialog title="Pattern generator" onClose={onClose}>
@@ -85,13 +85,13 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
           </label>
           <div className={`${field} col-span-2`}>
             Scale
-            <div className="flex overflow-hidden rounded-md border border-line text-sm">
+            <div className="seg">
               {(['major', 'minor'] as Scale[]).map((s) => (
                 <button
                   key={s}
                   onClick={() => update({ scale: s })}
                   aria-pressed={settings.scale === s}
-                  className={`flex-1 py-1.5 ${settings.scale === s ? 'bg-accent text-accent-ink' : 'text-text hover:bg-surface-2'}`}
+                  className="h-7 flex-1"
                 >
                   {s === 'major' ? 'Major' : 'Minor'}
                 </button>
@@ -110,7 +110,7 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
               </label>
             ))}
             <button
-              className="rounded-md border border-line px-2 py-1 text-sm hover:bg-surface-2"
+              className="btn h-8"
               onClick={() => update({ parts: complete ? ['drums'] : PARTS.map((p) => p.key) })}
             >
               {complete ? 'Drums only' : 'Complete'}
@@ -125,18 +125,18 @@ export function GeneratorDialog({ track, clip, onClose }: { track: Track; clip: 
         {tempoDiffers && (
           <p className="flex items-center justify-between gap-2 text-xs text-text-dim">
             This genre usually runs around {genre.tempo} BPM (the project is at {bpm}).
-            <button className="shrink-0 rounded-md border border-line px-2 py-1 text-text hover:bg-surface-2" onClick={() => setBpm(genre.tempo)}>
+            <button className="btn h-8" onClick={() => setBpm(genre.tempo)}>
               Use {genre.tempo} BPM
             </button>
           </p>
         )}
 
         <div className="flex justify-end gap-2">
-          <button className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2" onClick={onClose}>
+          <button className="btn h-8 px-3 text-sm" onClick={onClose}>
             {generated ? 'Done' : 'Cancel'}
           </button>
           <button
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink disabled:opacity-50"
+            className="btn btn-primary h-8 px-3 text-sm"
             disabled={!settings.parts.length}
             onClick={generate}
             title={generated ? 'Another take with the same settings (Ctrl+Z goes back)' : undefined}

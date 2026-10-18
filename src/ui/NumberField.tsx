@@ -33,7 +33,7 @@ export function NumberField({ value, onCommit, label, step = 1, min, className =
         if (e.key === 'Enter') commit()
         if (e.key === 'Escape') setDraft(null)
       }}
-      className={`rounded-md border border-line bg-bg px-2 py-1 font-mono text-text ${className}`}
+      className={`field font-mono tabular-nums ${className}`}
     />
   )
 }

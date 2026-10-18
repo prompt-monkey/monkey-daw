@@ -5,6 +5,7 @@ import { NumberField } from '../ui/NumberField'
 import { changeInputDevice, latencySeconds, openInput, readInputMeter, refreshDevices } from './session'
 import { useRecordingStore, type RecordingPrefs } from './store'
 import type { ChannelMode } from './take'
+import { rangeFill } from '../ui/rangeFill'
 
 const CHANNELS: { value: ChannelMode; label: string }[] = [
   { value: 'mono', label: 'Mono (both channels mixed)' },
@@ -22,7 +23,7 @@ export function RecordingSettingsDialog({ onClose }: { onClose: () => void }) {
     void refreshDevices()
   }, [])
 
-  const field = 'w-full rounded-md border border-line bg-bg px-2 py-1.5 text-sm text-text'
+  const field = 'field h-8 w-full text-sm'
   const label = 'flex flex-col gap-1 text-xs text-text-dim'
   const set = (patch: Partial<RecordingPrefs>) => setPrefs(patch)
 
@@ -83,6 +84,7 @@ export function RecordingSettingsDialog({ onClose }: { onClose: () => void }) {
               max={1}
               step={0.01}
               value={prefs.metronomeVolume}
+              style={rangeFill(prefs.metronomeVolume, 0, 1)}
               onChange={(e) => set({ metronomeVolume: Number(e.target.value) })}
               className="mt-2"
             />
@@ -108,7 +110,7 @@ export function RecordingSettingsDialog({ onClose }: { onClose: () => void }) {
           keep the playback out of the microphone.
         </p>
         <div className="flex justify-end">
-          <button className="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink" onClick={onClose}>
+          <button className="btn btn-primary h-8 px-4 text-sm" onClick={onClose}>
             Done
           </button>
         </div>

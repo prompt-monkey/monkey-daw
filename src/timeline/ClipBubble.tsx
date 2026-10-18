@@ -38,7 +38,7 @@ export function ClipBubble() {
     view.setClipBubble(null)
     void action()
   }
-  const button = 'rounded-md px-3 py-2 text-sm whitespace-nowrap hover:bg-surface-2 active:bg-surface-2'
+  const button = 'rounded-md px-3 py-2 text-sm whitespace-nowrap transition-[background-color] duration-150 ease-out hover:bg-surface-3 active:bg-surface-3'
   // Above the finger, kept on screen.
   const left = Math.min(Math.max(8, bubble.x - 120), window.innerWidth - 248)
   const top = Math.max(8, bubble.y - 64)
@@ -48,7 +48,7 @@ export function ClipBubble() {
       ref={ref}
       role="menu"
       aria-label={`${clip.name} actions`}
-      className="fixed z-[160] flex rounded-lg border border-line bg-surface p-1 shadow-2xl"
+      className="fixed z-[160] flex rounded-[10px] border border-transparent bg-surface-2 p-1 shadow-popover"
       style={{ left, top }}
     >
       <button role="menuitem" className={button} onClick={done(() => view.setSelection(duplicateClips([clip.id])))}>

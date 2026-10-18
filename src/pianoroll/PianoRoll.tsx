@@ -31,8 +31,9 @@ import { toast } from '../ui/toast'
 import { useShellStore } from '../ui/shell'
 import { DrumEditor } from '../drums/DrumEditor'
 import { ClipNameInput, PlaybackModeToggle, SwingControl } from './shared'
-import { btnClass, segClass } from './styles'
+import { btnClass, selectClass } from './styles'
 import { GRID_STEPS, usePianoRollStore, type PianoRollTool } from './store'
+import { rangeFill } from '../ui/rangeFill'
 
 const KEYS_W = 64
 const RULER_H = 20
@@ -191,7 +192,6 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
   const sampleInput = useRef<HTMLInputElement>(null)
   const instrument = track.instrument!
   const btn = btnClass
-  const seg = segClass
 
   const selected = notes.filter((n) => selection.includes(n.id))
   const shiftOctave = (dir: 1 | -1) => {
@@ -243,16 +243,16 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2 py-1 text-[11px]">
       <ClipNameInput clip={clip} />
-      <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Tool">
+      <div className="seg" role="group" aria-label="Tool">
         {TOOLS.map((t) => (
-          <button key={t.id} className={seg(tool === t.id)} aria-pressed={tool === t.id} title={t.title} onClick={() => setTool(t.id)}>
+          <button key={t.id} aria-pressed={tool === t.id} title={t.title} onClick={() => setTool(t.id)}>
             {t.label}
           </button>
         ))}
       </div>
       <label className="flex items-center gap-1 text-text-dim" title="Grid: where notes snap (hold Alt for free placement)">
         Grid
-        <select value={grid} onChange={(e) => setGrid(Number(e.target.value))} className="rounded border border-line bg-bg px-1 py-0.5 text-text">
+        <select value={grid} onChange={(e) => setGrid(Number(e.target.value))} className={selectClass}>
           {GRID_STEPS.map((g) => (
             <option key={g.label} value={g.beats}>
               {g.label}
@@ -274,9 +274,10 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
           onPointerUp={endGesture}
           onKeyUp={endGesture}
           className="w-16"
+          style={rangeFill(selected.length === 1 ? selected[0].velocity : velocity, 0.05, 1)}
           aria-label="Velocity"
         />
-        <span className="w-7 font-mono">{Math.round((selected.length === 1 ? selected[0].velocity : velocity) * 100)}</span>
+        <span className="w-7 font-mono tabular-nums">{Math.round((selected.length === 1 ? selected[0].velocity : velocity) * 100)}</span>
       </label>
       <button className={btn} onClick={() => shiftOctave(-1)} title="Selected notes (or all) an octave down (Shift+↓)">
         Oct −
@@ -292,7 +293,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
         <select
           value={instrument.type}
           onChange={(e) => setInstrument(track.id, { type: e.target.value as Instrument['type'] })}
-          className="rounded border border-line bg-bg px-1 py-0.5 text-text"
+          className={selectClass}
         >
           {Object.entries(INSTRUMENT_LABELS).map(([type, label]) => (
             <option key={type} value={type} disabled={type === 'sampler' && !instrument.sample}>
@@ -303,7 +304,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
         </select>
       </label>
       <button
-        className={`max-w-40 truncate rounded border border-dashed px-1.5 py-0.5 leading-4 ${instrument.type === 'sampler' ? 'border-accent text-text' : 'border-line text-text-dim'} hover:bg-surface-2`}
+        className={`btn btn-sm h-6 max-w-40 border-dashed bg-transparent px-2 shadow-none ${instrument.type === 'sampler' ? 'border-accent text-text' : 'border-line-strong text-text-dim'}`}
         onDragOver={(e) => {
           if (!e.dataTransfer.types.includes(SAMPLE_DRAG_TYPE) && !e.dataTransfer.types.includes('Files')) return
           e.preventDefault()
@@ -332,7 +333,7 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
           <select
             value={instrument.sample.root}
             onChange={(e) => setInstrument(track.id, { sample: { ...instrument.sample!, root: Number(e.target.value) } }, 'Change root note')}
-            className="rounded border border-line bg-bg px-1 py-0.5 text-text"
+            className={selectClass}
           >
             {Array.from({ length: 73 }, (_, i) => 24 + i).map((p) => (
               <option key={p} value={p}>
@@ -354,9 +355,10 @@ function Toolbar({ track, clip, notes }: { track: Track; clip: MidiClip; notes: 
           onPointerUp={endGesture}
           onKeyUp={endGesture}
           className="w-16"
+          style={rangeFill(instrument.glide, 0, 0.5)}
           aria-label="Glide"
         />
-        <span className="w-10 font-mono">{instrument.glide ? `${Math.round(instrument.glide * 1000)} ms` : 'off'}</span>
+        <span className="w-10 font-mono tabular-nums">{instrument.glide ? `${Math.round(instrument.glide * 1000)} ms` : 'off'}</span>
       </label>
 
       <span className="flex-1" />
@@ -779,7 +781,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {narrow && (selection.length > 0 || hasClipboard) && (
-        <div className="absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1 rounded-lg border border-line bg-surface p-1 shadow-2xl" role="toolbar" aria-label="Note actions">
+        <div className="absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1 rounded-lg border border-transparent bg-surface-2 p-1 shadow-popover" role="toolbar" aria-label="Note actions">
           {selection.length > 0 && (
             <>
               <button className={btnClass} onClick={() => copySelected()}>
@@ -788,7 +790,7 @@ function Editor({ track, clip, color }: { track: Track; clip: MidiClip; color: s
               <button className={btnClass} onClick={duplicateSelected}>
                 Duplicate
               </button>
-              <button className={`${btnClass} text-danger`} onClick={deleteSelected}>
+              <button className={`${btnClass} btn-danger`} onClick={deleteSelected}>
                 Delete
               </button>
             </>

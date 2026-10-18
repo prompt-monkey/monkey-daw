@@ -26,6 +26,7 @@ import { engine } from '../audio/engine'
 import { noteName } from '../model/midi'
 import { usePlayheadFrame } from '../timeline/usePlayheadFrame'
 import type { TunerReading } from './specialist'
+import { Icon } from '../ui/Icon'
 
 /** Auto-tune's live readout: the note being sung, how far off it is, and where it's going. */
 function TunerReadout({ channel, effectId }: { channel: ChannelRef; effectId: string }) {
@@ -50,7 +51,7 @@ function TunerReadout({ channel, effectId }: { channel: ChannelRef; effectId: st
 /** Drag-and-drop data type carrying the id of an effect being reordered. */
 const EFFECT_DRAG_TYPE = 'application/x-monkey-daw-effect'
 
-const small = 'rounded border border-line px-2 py-0.5 text-[11px] hover:bg-surface-2 disabled:opacity-40'
+const small = 'btn btn-sm h-6 px-2'
 
 /** Adds a lane for an effect parameter and shows it, saying where it is drawn. */
 function automateParam(channel: ChannelRef, effect: Effect, def: NumberParam) {
@@ -145,8 +146,8 @@ const EffectCard = memo(function EffectCard({
 
   return (
     <article
-      className={`relative flex shrink-0 flex-col gap-2 rounded-lg border bg-surface p-2.5 ${
-        effect.enabled ? 'border-line' : 'border-line opacity-60'
+      className={`relative flex shrink-0 flex-col gap-2 rounded-[14px] border border-transparent bg-surface p-2.5 shadow-ring ${
+        effect.enabled ? '' : 'opacity-60'
       } ${dragging ? 'opacity-40' : ''}`}
       aria-label={`${def.name} effect`}
       onDragOver={(e) => {
@@ -187,14 +188,14 @@ const EffectCard = memo(function EffectCard({
           setDragging(true)
         }}
         onDragEnd={() => setDragging(false)}
-        className="group/header -mx-1 flex cursor-grab items-center gap-1.5 rounded px-1 py-0.5 hover:bg-surface-2 active:cursor-grabbing"
+        className="group/header -mx-1 flex cursor-grab items-center gap-1.5 rounded-md px-1 py-0.5 transition-[background-color] duration-150 ease-out hover:bg-surface-2 active:cursor-grabbing"
         title="Drag to reorder"
       >
-        <span className="text-text-dim/60 group-hover/header:text-text" aria-hidden>
-          ⠿
+        <span className="text-text-dim/50 group-hover/header:text-text" aria-hidden>
+          <Icon name="grip" size={12} />
         </span>
         <button
-          className={`size-3 shrink-0 rounded-full border ${effect.enabled ? 'border-accent bg-accent' : 'border-line bg-transparent'}`}
+          className={`size-3 shrink-0 rounded-full border transition-[background-color,border-color] duration-150 ease-out ${effect.enabled ? 'border-accent bg-accent' : 'border-line-strong bg-transparent'}`}
           onClick={() => toggleEffect(channel, effect.id)}
           aria-pressed={effect.enabled}
           aria-label={effect.enabled ? `Turn ${def.name} off` : `Turn ${def.name} on`}
@@ -206,15 +207,15 @@ const EffectCard = memo(function EffectCard({
         {automatableParams(effect.type).length > 0 && (
           <Menu
             label={`Automate a ${def.name} control`}
-            className="rounded px-1.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+            className="btn btn-sm btn-icon btn-ghost"
             items={automatableParams(effect.type).map((p) => ({ label: `Automate ${p.label}`, onSelect: () => automateParam(channel, effect, p) }))}
           >
-            <span title="Automate a control of this effect">∿</span>
+            <Icon name="automation" size={14} />
           </Menu>
         )}
         <Menu
           label={`${def.name} options`}
-          className="rounded px-1.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+          className="btn btn-sm btn-icon btn-ghost"
           items={[
             ...(index > 0 ? [{ label: 'Move left', onSelect: () => moveEffect(channel, effect.id, index - 1) }] : []),
             ...(index < count - 1 ? [{ label: 'Move right', onSelect: () => moveEffect(channel, effect.id, index + 1) }] : []),
@@ -223,7 +224,7 @@ const EffectCard = memo(function EffectCard({
             { label: 'Remove', onSelect: () => removeEffect(channel, effect.id), danger: true },
           ]}
         >
-          ⋮
+          <Icon name="more" size={14} />
         </Menu>
       </header>
 
@@ -255,7 +256,7 @@ const EffectCard = memo(function EffectCard({
                 <select
                   value={effect.params[p.key] as string}
                   onChange={(e) => set(p.key, e.target.value)}
-                  className="w-full rounded border border-line bg-bg px-1 py-0.5 text-[11px] text-text"
+                  className="field field-sm w-full"
                 >
                   {(p as ChoiceParam).options.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -270,7 +271,7 @@ const EffectCard = memo(function EffectCard({
           return (
             <div key={p.key} className="flex w-20 flex-col items-center justify-center gap-1 text-[10px] text-text-dim">
               {p.label}
-              <button className={`${small} ${on ? 'border-accent text-accent' : ''}`} onClick={() => set(p.key, !on)} aria-pressed={on}>
+              <button className={small} onClick={() => set(p.key, !on)} aria-pressed={on}>
                 {on ? 'On' : 'Off'}
               </button>
             </div>
@@ -291,7 +292,7 @@ function PresetMenu({ channel, effects, channelName }: { channel: ChannelRef; ef
         autoFocus
         placeholder="Preset name"
         aria-label="Preset name"
-        className="w-40 rounded border border-line bg-bg px-2 py-0.5 text-xs"
+        className="field field-sm h-6 w-40 px-2 text-xs"
         onBlur={() => setSaving(false)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') setSaving(false)
@@ -319,7 +320,8 @@ function PresetMenu({ channel, effects, channelName }: { channel: ChannelRef; ef
         ...(effects.length ? [{ label: `Clear ${channelName}'s chain`, onSelect: () => applyChain(channel, [], 'Clear effects'), danger: true }] : []),
       ]}
     >
-      Presets ▾
+      Presets
+      <Icon name="chevronDown" size={12} />
     </Menu>
   )
 }
@@ -335,7 +337,7 @@ function EffectScreen({ effect, bpm }: { effect: Effect; bpm: number }) {
     <svg
       viewBox={`0 0 ${SCREEN_W} ${SCREEN_H}`}
       preserveAspectRatio="none"
-      className={`h-9 w-full rounded border border-line bg-bg ${effect.enabled ? 'text-accent' : 'text-text-dim'}`}
+      className={`h-9 w-full rounded-[3px] bg-bg ${effect.enabled ? 'text-accent' : 'text-text-dim'}`}
       aria-hidden
     >
       {viz.baseline !== undefined && (
@@ -358,7 +360,7 @@ const GROUPS = [
 function EffectPicker({ onPick, onClose }: { onPick: (type: EffectType) => void; onClose: () => void }) {
   return (
     <Dialog title="Add effect" onClose={onClose} wide>
-      <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto pr-1">
+      <div className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto overscroll-contain pr-1">
         {GROUPS.map((group) => (
           <section key={group.id}>
             <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-accent uppercase">{group.title}</h3>
@@ -367,7 +369,7 @@ function EffectPicker({ onPick, onClose }: { onPick: (type: EffectType) => void;
                 <button
                   key={type}
                   onClick={() => onPick(type)}
-                  className="flex flex-col items-start gap-0.5 rounded-md border border-line px-2.5 py-1.5 text-left hover:border-accent hover:bg-surface-2"
+                  className="flex flex-col items-start gap-0.5 rounded-md border border-transparent bg-surface-2 px-2.5 py-1.5 text-left shadow-ring transition-[background-color,box-shadow] duration-150 ease-out hover:bg-surface-3 hover:shadow-ring-hover"
                 >
                   <span className="text-sm font-semibold">{EFFECTS[type].name}</span>
                   <span className="text-[11px] leading-snug text-text-dim">{EFFECTS[type].description}</span>
@@ -407,7 +409,7 @@ export function EffectsRack() {
           <select
             value={ref}
             onChange={(e) => openRack(e.target.value as Id)}
-            className="rounded border border-line bg-bg px-1.5 py-0.5 text-xs text-text"
+            className="field field-sm h-6 text-xs"
             aria-label="Channel"
           >
             {tracks.map((t) => (
@@ -444,7 +446,7 @@ export function EffectsRack() {
         ))}
         <div className="flex shrink-0 flex-col items-center gap-2 self-center">
           <button
-            className="rounded-lg border border-dashed border-line px-4 py-6 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+            className="rounded-lg border border-dashed border-line-strong px-4 py-6 text-xs text-text-dim transition-[background-color,color] duration-150 ease-out hover:bg-surface-2 hover:text-text"
             onClick={() => setPicking(chain.effects.length)}
           >
             + Add effect

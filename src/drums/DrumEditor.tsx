@@ -6,7 +6,7 @@ import { secondsPerBar } from '../model/grid'
 import { beatSeconds, clipBeatRange, createNote, placeNotes } from '../model/midi'
 import type { AssetMeta, DrumPad, MidiClip, Note, Track } from '../model/types'
 import { ClipNameInput, PlaybackModeToggle, SwingControl } from '../pianoroll/shared'
-import { btnClass, segClass, selectClass } from '../pianoroll/styles'
+import { btnClass, selectClass } from '../pianoroll/styles'
 import { applyClipEdits, applyKitPreset, setClipNotes, setPad, setPadSample, setPadSamples } from '../state/actions'
 import { loadLibrary, useLibraryStore } from '../library/store'
 import { pickLibraryKit } from './libraryKit'
@@ -17,6 +17,8 @@ import { GeneratorDialog } from './GeneratorDialog'
 import { DRUM_VOICES, KIT_PRESETS, VOICE_LABELS } from './kits'
 import { useViewStore } from '../state/viewStore'
 import { Menu } from '../ui/Menu'
+import { rangeFill } from '../ui/rangeFill'
+import { Icon } from '../ui/Icon'
 
 const ROW_H = 20
 const HEADER_W = 92
@@ -70,8 +72,8 @@ function PadGrid({ track, selected, onSelect }: { track: Track; selected: number
             if (sampleId) void assign(pad.note, () => assetForSample(sampleId))
             else if (file) void assign(pad.note, () => engine.assets.importFile(file, engine.context))
           }}
-          className={`flex h-11 touch-none flex-col justify-center rounded-md border px-1.5 text-left active:bg-accent/30 ${
-            pad.note === selected ? 'border-accent bg-accent/15' : 'border-line bg-surface-2 hover:border-text-dim'
+          className={`flex h-11 touch-none flex-col justify-center rounded-md border px-1.5 text-left transition-[border-color,background-color] duration-150 ease-out active:bg-accent/30 ${
+            pad.note === selected ? 'border-accent bg-accent/15' : 'border-line bg-surface-2 hover:border-line-strong'
           } ${dropTarget === pad.note ? 'ring-2 ring-accent' : ''}`}
           title={`${pad.name}: click to play, drop a one-shot here to use it`}
         >
@@ -84,7 +86,7 @@ function PadGrid({ track, selected, onSelect }: { track: Track; selected: number
 }
 
 /**
- * A step-sequencer row's name: click to select and hear it; the ▾ menu (or dropping a one-shot on
+ * A step-sequencer row's name: click to select and hear it; the arrow menu (or dropping a one-shot on
  * it) changes the row's sound without leaving the sequencer.
  */
 function RowHeader({ track, pad, selected, onSelect }: { track: Track; pad: DrumPad; selected: boolean; onSelect: () => void }) {
@@ -147,7 +149,7 @@ function RowHeader({ track, pad, selected, onSelect }: { track: Track; pad: Drum
           })),
         ]}
       >
-        ▾
+        <Icon name="chevronDown" size={10} />
       </Menu>
       <input
         ref={fileRef}
@@ -181,13 +183,14 @@ function PadSettings({ track, pad }: { track: Track; pad: DrumPad }) {
         onKeyUp={endGesture}
         onDoubleClick={() => onChange(reset)}
         aria-label={`${pad.name} ${label.toLowerCase()}`}
+        style={rangeFill(value, min, max, min < 0 ? 0 : min)}
         title="Double-click to reset"
       />
-      <span className="text-right font-mono">{text}</span>
+      <span className="text-right font-mono tabular-nums">{text}</span>
     </label>
   )
   return (
-    <div className="mt-2 flex flex-col gap-1 rounded-md border border-line p-2">
+    <div className="mt-2 flex flex-col gap-1 rounded-lg border border-transparent bg-surface p-2 shadow-ring">
       <div className="flex items-center gap-1 text-[11px]">
         <span className="min-w-0 flex-1 truncate font-semibold">{pad.name}</span>
         <button className={btnClass} onClick={() => fileRef.current?.click()} title="Use a WAV or MP3 file on this pad">
@@ -415,9 +418,9 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
         >
           {building ? 'Building…' : '🎲 Kit from library'}
         </button>
-        <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Step size">
+        <div className="seg" role="group" aria-label="Step size">
           {STEP_SIZES.map((s) => (
-            <button key={s.label} className={segClass(s === stepSize)} aria-pressed={s === stepSize} onClick={() => setStepSize(s)}>
+            <button key={s.label} aria-pressed={s === stepSize} onClick={() => setStepSize(s)}>
               {s.label}
             </button>
           ))}
@@ -435,7 +438,7 @@ export function DrumEditor({ track, clip, color }: { track: Track; clip: MidiCli
         </label>
         <PlaybackModeToggle />
         <SwingControl clip={clip} />
-        <button className={`${btnClass} border-accent text-accent`} onClick={() => setGeneratorOpen(true)} title="Make a beat (and chords, melody, bass) for a genre">
+        <button className={`${btnClass} btn-primary`} onClick={() => setGeneratorOpen(true)} title="Make a beat (and chords, melody, bass) for a genre">
           Generate…
         </button>
         <span className="flex-1" />

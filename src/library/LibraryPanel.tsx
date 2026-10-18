@@ -10,13 +10,14 @@ import { CATEGORY_LABELS, SIGNATURES, categoryColor, detectKind, type SampleCate
 import { fromDataTransfer, fromFileList } from './incoming'
 import type { SampleInfo } from './repo'
 import { importLibrary, loadLibrary, removeLibrary, renameLibraryTo, useLibraryStore } from './store'
+import { Icon } from '../ui/Icon'
 
 /** Most results shown at once while searching or filtering. */
 const MAX_RESULTS = 300
 
 const chip = (active: boolean) =>
-  `flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] leading-4 ${
-    active ? 'border-accent bg-accent/15 text-text' : 'border-line text-text-dim hover:text-text'
+  `flex h-5 items-center gap-1 rounded-full border px-2 text-[10px] font-medium transition-[color,background-color,border-color] duration-150 ease-out ${
+    active ? 'border-accent/60 bg-accent/15 text-text' : 'border-line text-text-dim hover:border-line-strong hover:text-text'
   }`
 
 const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
@@ -55,7 +56,7 @@ const SampleRow = memo(function SampleRow({ sample, depth, hint }: { sample: Sam
       </span>
       {sample.bpm && <span className="font-mono text-[10px] text-text-dim">{sample.bpm}</span>}
       {kind === 'one-shot' && <span className="text-[10px] text-text-dim" title="One-shot">•</span>}
-      <span className={`w-3 text-center text-[10px] ${playing ? 'text-accent' : 'text-transparent'}`}>▶</span>
+      <Icon name="play" size={10} className={playing ? 'text-accent' : 'invisible'} />
     </li>
   )
 })
@@ -72,7 +73,7 @@ function Folder({ node, libraryId, depth }: { node: FolderNode; libraryId: strin
         onClick={() => toggleExpanded(key)}
         aria-expanded={open}
       >
-        <span className="w-3 text-[10px]">{open ? '▾' : '▸'}</span>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
         <span className="truncate">{node.name}</span>
       </button>
       {open && <FolderContents node={node} libraryId={libraryId} depth={depth + 1} />}
@@ -108,7 +109,7 @@ function LibraryItem({ id, name, samples }: { id: string; name: string; samples:
             autoFocus
             defaultValue={name}
             aria-label="Library name"
-            className="min-w-0 flex-1 rounded border border-line bg-bg px-1.5 py-0.5 text-xs"
+            className="field field-sm flex-1 text-xs"
             onBlur={(e) => {
               setRenaming(false)
               if (e.target.value.trim() && e.target.value !== name) void renameLibraryTo(id, e.target.value)
@@ -120,30 +121,30 @@ function LibraryItem({ id, name, samples }: { id: string; name: string; samples:
           />
         ) : (
           <button className="flex min-w-0 flex-1 items-center gap-1 text-left" onClick={() => toggleExpanded(id)} aria-expanded={open}>
-            <span className="w-3 text-[10px] text-text-dim">{open ? '▾' : '▸'}</span>
+            <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} className="text-text-dim" />
             <span className="truncate text-xs font-semibold">{name}</span>
             <span className="shrink-0 text-[10px] text-text-dim">{samples.length}</span>
           </button>
         )}
         {confirmDelete ? (
           <>
-            <button className="rounded border border-line px-1.5 py-0.5 text-[10px] text-danger" onClick={() => void removeLibrary(id)}>
+            <button className="btn btn-sm btn-danger" onClick={() => void removeLibrary(id)}>
               Remove
             </button>
-            <button className="rounded border border-line px-1.5 py-0.5 text-[10px]" onClick={() => setConfirmDelete(false)}>
+            <button className="btn btn-sm" onClick={() => setConfirmDelete(false)}>
               Keep
             </button>
           </>
         ) : (
           <Menu
             label="Library options"
-            className="rounded px-1.5 py-0.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+            className="btn btn-sm btn-icon btn-ghost"
             items={[
               { label: 'Rename library', onSelect: () => setRenaming(true) },
               { label: 'Remove library', onSelect: () => setConfirmDelete(true), danger: true },
             ]}
           >
-            ⋮
+            <Icon name="more" size={14} />
           </Menu>
         )}
       </div>
@@ -172,7 +173,7 @@ function PickBanner() {
       <span className="min-w-0 flex-1">
         {pick.kind === 'append' ? `Add to the end of “${target}”` : pick.kind === 'pad' ? `A sound for the ${target} pad` : `Swap the audio of “${target}”`}: tap a sample to hear it, then “Use this sample”.
       </span>
-      <button className="rounded border border-line px-1.5 py-0.5 hover:bg-surface-2" onClick={() => useViewStore.getState().setLibraryPick(null)}>
+      <button className="btn btn-sm" onClick={() => useViewStore.getState().setLibraryPick(null)}>
         Cancel
       </button>
     </div>
@@ -235,13 +236,14 @@ function PreviewPane() {
       <canvas ref={canvas} className="h-12 w-full rounded bg-bg" aria-hidden />
       <div className="flex gap-2">
         <button
-          className="rounded-md border border-line px-2.5 py-1 text-xs hover:bg-surface-2"
+          className="btn h-7 ps-2 text-xs"
           onClick={() => (playing ? stopPreview() : void previewSample(sample.id))}
         >
-          {playing ? '■ Stop' : '▶ Preview'}
+          <Icon name={playing ? 'stop' : 'play'} size={14} />
+          {playing ? 'Stop' : 'Preview'}
         </button>
         <button
-          className={`rounded-md border px-2.5 py-1 text-xs hover:bg-surface-2 ${picking ? 'border-accent text-accent' : 'border-line'}`}
+          className={`btn h-7 text-xs ${picking ? 'btn-primary' : ''}`}
           onClick={() => addAtPlayhead(sample.id)}
         >
           {picking ? 'Use this sample' : 'Add at playhead'}
@@ -305,12 +307,13 @@ export function LibraryPanel() {
     >
       <PickBanner />
       <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
-        <h2 className="flex-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
-          Library <span className="font-normal normal-case">· {samples.length} samples</span>
+        <h2 className="flex flex-1 items-baseline gap-2">
+          <span className="label">Library</span>
+          <span className="text-[11px] text-text-dim tabular-nums">{samples.length} samples</span>
         </h2>
         <Menu
           label="Import samples"
-          className="rounded border border-line px-2 py-0.5 text-[11px] hover:bg-surface-2"
+          className="btn btn-sm h-6 px-2"
           items={[
             { label: 'Import folder…', onSelect: () => folderInput.current?.click() },
             { label: 'Import files…', onSelect: () => fileInput.current?.click() },
@@ -351,7 +354,7 @@ export function LibraryPanel() {
             onChange={(e) => setFilter({ query: e.target.value })}
             placeholder="Search samples"
             aria-label="Search samples"
-            className="rounded-md border border-line bg-bg px-2 py-1 text-xs"
+            className="field text-xs"
           />
           <div className="flex flex-wrap gap-1">
             {(['loop', 'one-shot'] as const).map((k) => (
@@ -381,13 +384,13 @@ export function LibraryPanel() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {importing && <p className="p-3 text-xs text-text-dim">Importing “{importing}”…</p>}
         {loaded && samples.length === 0 && !importing && (
           <div className="flex flex-col gap-2 p-4 text-xs text-text-dim">
             <p>Your sample library is empty.</p>
             <p>Import a folder of WAV or MP3 samples, or drop folders here. They stay in this browser.</p>
-            <button className="self-start rounded-md border border-accent px-2.5 py-1 text-accent" onClick={() => folderInput.current?.click()}>
+            <button className="btn btn-primary self-start" onClick={() => folderInput.current?.click()}>
               Import folder…
             </button>
           </div>

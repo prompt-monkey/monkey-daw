@@ -55,7 +55,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const field = 'w-full rounded-md border border-line bg-bg px-2 py-1.5 text-sm text-text'
+  const field = 'field h-8 w-full text-sm'
   const label = 'flex flex-col gap-1 text-xs text-text-dim'
 
   return (
@@ -193,7 +193,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         {status.kind === 'running' && (
           <div className="flex flex-col gap-1" role="status">
             <div className="h-2 overflow-hidden rounded-full bg-bg">
-              <div className="h-full bg-accent transition-[width]" style={{ width: `${Math.round(status.progress * 100)}%` }} />
+              <div className="h-full origin-left bg-accent transition-[scale] duration-150 ease-out motion-reduce:transition-none" style={{ scale: `${status.progress} 1` }} />
             </div>
             <span className="text-xs text-text-dim">
               {settings.content === 'stems' ? 'Rendering stems' : status.progress < 0.85 ? 'Rendering' : 'Encoding'}…{' '}
@@ -231,11 +231,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="flex justify-end gap-2">
-          <button className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2" onClick={onClose} disabled={running}>
+          <button className="btn h-8 px-3 text-sm" onClick={onClose} disabled={running}>
             {status.kind === 'done' ? 'Close' : 'Cancel'}
           </button>
           <button
-            className="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink disabled:opacity-40"
+            className="btn btn-primary h-8 px-4 text-sm"
             onClick={run}
             disabled={running || !range}
           >

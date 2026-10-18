@@ -2,6 +2,7 @@ import { addBus } from '../state/actions'
 import { useProjectStore } from '../state/projectStore'
 import { trackColor } from '../timeline/colors'
 import { BusStrip, MasterStrip, TrackStrip } from './ChannelStrip'
+import { Icon } from '../ui/Icon'
 
 /** Bottom panel: one strip per track, then the buses, with the master pinned on the right. */
 export function Mixer() {
@@ -24,10 +25,11 @@ export function Mixer() {
         <div className="flex shrink-0 items-start p-2">
           <button
             onClick={() => addBus()}
-            className="rounded-md border border-dashed border-line px-3 py-1.5 text-xs text-text-dim hover:bg-surface-2 hover:text-text"
+            className="btn ps-2 text-xs text-text-dim"
             title="Add a bus (Ctrl+Shift+B)"
           >
-            + Bus
+            <Icon name="plus" size={14} />
+            Bus
           </button>
         </div>
       </div>

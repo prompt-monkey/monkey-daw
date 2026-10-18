@@ -38,16 +38,16 @@ export function PromptDialog({ title, label, initial, type = 'text', hint, submi
               setError(null)
             }}
             onFocus={(e) => e.target.select()}
-            className="rounded-md border border-line bg-bg px-2 py-1.5 text-sm text-text"
+            className="field h-8 text-sm"
           />
         </label>
         {hint && <p className="text-xs text-text-dim">{hint}</p>}
         {error && <p className="text-xs text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
-          <button type="button" className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2" onClick={onClose}>
+          <button type="button" className="btn h-8 px-3 text-sm" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink">
+          <button type="submit" className="btn btn-primary h-8 px-3 text-sm">
             {submitLabel}
           </button>
         </div>

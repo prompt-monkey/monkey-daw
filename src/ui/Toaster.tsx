@@ -1,4 +1,5 @@
 import { useToastStore } from './toast'
+import { Icon } from './Icon'
 
 export function Toaster() {
   const toasts = useToastStore((s) => s.toasts)
@@ -8,8 +9,8 @@ export function Toaster() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`pointer-events-auto flex max-w-sm items-center gap-3 rounded-lg border px-3 py-2 text-xs shadow-xl ${
-            t.kind === 'error' ? 'border-danger/50 bg-surface-2 text-danger' : 'border-line bg-surface-2 text-text'
+          className={`enter pointer-events-auto flex max-w-sm items-center gap-3 rounded-lg border bg-surface-2 py-2 ps-3 pe-2 text-xs shadow-popover ${
+            t.kind === 'error' ? 'border-danger/50 text-danger' : 'border-transparent text-text'
           }`}
           role={t.kind === 'error' ? 'alert' : 'status'}
         >
@@ -25,8 +26,8 @@ export function Toaster() {
               {t.action.label}
             </button>
           )}
-          <button className="shrink-0 text-text-dim hover:text-text" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-            ✕
+          <button className="btn btn-sm btn-icon btn-ghost" onClick={() => dismiss(t.id)} aria-label="Dismiss">
+            <Icon name="close" size={12} />
           </button>
         </div>
       ))}

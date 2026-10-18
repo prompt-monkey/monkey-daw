@@ -7,11 +7,12 @@ import { useViewStore } from '../state/viewStore'
 import { toast } from '../ui/toast'
 import { KIND_NAMES, LYRIC_KINDS, lyricsStats, lyricsText, sectionLabels } from './lyrics'
 import { MAX_FONT, MIN_FONT, changeFontSize, setLyricsMode, useLyricsPrefs } from './prefs'
+import { Icon } from '../ui/Icon'
 
 /** A section just added from the buttons; its text box takes the focus when it appears. */
 const focusNext = { id: null as string | null }
 
-const small = 'rounded border border-line px-1.5 py-0.5 text-[11px] leading-4 hover:bg-surface-2 disabled:opacity-40'
+const small = 'btn btn-sm h-6 px-2'
 
 function AddButtons({ big = false }: { big?: boolean }) {
   return (
@@ -19,12 +20,13 @@ function AddButtons({ big = false }: { big?: boolean }) {
       {LYRIC_KINDS.map((kind) => (
         <button
           key={kind}
-          className={big ? 'rounded-md border border-line px-2 py-1 text-xs hover:bg-surface-2' : small}
+          className={big ? 'btn h-7 ps-2 text-xs' : `${small} ps-1.5`}
           onClick={() => {
             focusNext.id = addLyricSection(kind)
           }}
         >
-          + {KIND_NAMES[kind]}
+          <Icon name="plus" size={12} />
+          {KIND_NAMES[kind]}
         </button>
       ))}
     </div>
@@ -41,14 +43,14 @@ function SectionEditor({ section, label, index, count, fontSize }: { section: Ly
     textRef.current?.scrollIntoView({ block: 'nearest' })
   }, [section.id])
   return (
-    <div className="rounded-md border border-line bg-surface">
+    <div className="rounded-lg border border-transparent bg-surface shadow-ring">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-accent">{label}</span>
         <select
           value={section.kind}
           onChange={(e) => setLyricKind(section.id, e.target.value as LyricSectionKind)}
           aria-label={`${label} type`}
-          className="rounded border border-line bg-bg px-1 py-0.5 text-[11px] text-text"
+          className="field field-sm h-6"
         >
           {LYRIC_KINDS.map((k) => (
             <option key={k} value={k}>
@@ -56,19 +58,19 @@ function SectionEditor({ section, label, index, count, fontSize }: { section: Ly
             </option>
           ))}
         </select>
-        <button className={small} disabled={index === 0} onClick={() => moveLyricSection(section.id, index - 1)} aria-label={`Move ${label} up`}>
-          ↑
+        <button className={`${small} btn-icon`} disabled={index === 0} onClick={() => moveLyricSection(section.id, index - 1)} aria-label={`Move ${label} up`}>
+          <Icon name="arrowUp" size={12} />
         </button>
         <button
-          className={small}
+          className={`${small} btn-icon`}
           disabled={index === count - 1}
           onClick={() => moveLyricSection(section.id, index + 1)}
           aria-label={`Move ${label} down`}
         >
-          ↓
+          <Icon name="arrowDown" size={12} />
         </button>
-        <button className={`${small} text-danger`} onClick={() => removeLyricSection(section.id)} aria-label={`Delete ${label}`} title="Delete this section">
-          ✕
+        <button className={`${small} btn-icon btn-ghost hover:text-danger`} onClick={() => removeLyricSection(section.id)} aria-label={`Delete ${label}`} title="Delete this section">
+          <Icon name="close" size={12} />
         </button>
       </div>
       <textarea
@@ -94,7 +96,6 @@ export function LyricsPanel() {
   const { mode, fontSize } = useLyricsPrefs()
   const labels = sectionLabels(sections)
   const stats = lyricsStats(sections)
-  const seg = (active: boolean) => `px-2 py-0.5 text-[11px] leading-4 ${active ? 'bg-accent text-accent-ink' : 'hover:bg-surface-2'}`
 
   const copy = async () => {
     try {
@@ -113,11 +114,11 @@ export function LyricsPanel() {
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-line bg-bg" aria-label="Lyrics">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2 py-1.5">
-        <div className="flex overflow-hidden rounded border border-line" role="group" aria-label="Lyrics mode">
-          <button className={seg(mode === 'write')} aria-pressed={mode === 'write'} onClick={() => setLyricsMode('write')}>
+        <div className="seg" role="group" aria-label="Lyrics mode">
+          <button aria-pressed={mode === 'write'} onClick={() => setLyricsMode('write')}>
             Write
           </button>
-          <button className={seg(mode === 'sing')} aria-pressed={mode === 'sing'} onClick={() => setLyricsMode('sing')} title="Big text to sing along">
+          <button aria-pressed={mode === 'sing'} onClick={() => setLyricsMode('sing')} title="Big text to sing along">
             Sing
           </button>
         </div>
@@ -134,12 +135,12 @@ export function LyricsPanel() {
         <button className={small} onClick={download} disabled={!sections.length} title="Download the lyrics as a .txt file">
           .txt
         </button>
-        <button className={small} onClick={() => useViewStore.getState().setLyricsOpen(false)} aria-label="Close lyrics" title="Close">
-          ✕
+        <button className={`${small} btn-icon btn-ghost`} onClick={() => useViewStore.getState().setLyricsOpen(false)} aria-label="Close lyrics" title="Close">
+          <Icon name="close" size={14} />
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
         {!sections.length ? (
           <div className="flex flex-col gap-3 p-2 text-sm text-text-dim">
             <p>Write the song in sections: verses, chorus, bridge… Add the first one:</p>

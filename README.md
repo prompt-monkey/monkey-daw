@@ -46,8 +46,9 @@ Then open the address it prints (usually <http://localhost:5173>).
 | `npm run build` | Production build in `dist/` |
 | `npm run preview` | Serve the production build locally |
 
-The build is a static site, so `dist/` can be hosted anywhere that serves files, such as GitHub
-Pages, Netlify or Cloudflare Pages.
+The build is a static site, so `dist/` can be hosted anywhere that serves files. Pushes to `main`
+publish it to GitHub Pages through `.github/workflows/pages.yml`; to serve it from a sub-folder
+elsewhere, build with `BASE_PATH=/folder/ npm run build`.
 
 ## How it's built
 

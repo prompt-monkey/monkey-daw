@@ -5,6 +5,9 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // The path the app is served from: "/" by default; the GitHub Pages workflow sets BASE_PATH to
+  // "/monkey-daw/", since Pages serves the repository under that folder.
+  base: process.env.BASE_PATH ?? '/',
   plugins: [react(), tailwindcss()],
   build: {
     rolldownOptions: {

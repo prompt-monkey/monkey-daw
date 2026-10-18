@@ -34,7 +34,7 @@ in total) and was checked in Chrome.
 | 9 | Phone and touch: clip bubble, track + and Mix panel, piano roll move/zoom tool, tap-to-select, floating note bar, stretch handle, double-tap delete, two-way pinch; time-signature warning, drum row sound menu, fader wheel and arrows | Done | `b72a5bc` |
 | 10 | Swing per clip (drums and MIDI), pattern generator for 3/4, 2/4 and 6/8 | Done | `0b41424` |
 | 11 | Faster first load: editors and dialogs load on first use, libraries in their own chunks | Done | `fc150d2` |
-| 12 | UI polish: shared button, field and slider styles, one icon set, a two-row transport bar | Done | |
+| 12 | UI polish: shared button, field and slider styles, one icon set, a two-row transport bar | Done | `392d48c` |
 
 Known gaps in what's built (planned for later steps):
 - Timeline: consolidating a hard-panned mono clip comes out about 3 dB louder on that side; a
